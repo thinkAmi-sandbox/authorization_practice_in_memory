@@ -43,11 +43,7 @@ export class UnixPermission {
 
   // 権限チェック（メイン）
   // 注: rootユーザーやsetuid等の特殊ケースは考慮しない
-  hasPermission(
-    userName: string,
-    userGroupNames: string[],
-    action: 'read' | 'write'
-  ): boolean {
+  hasPermission(userName: string, userGroupNames: string[], action: 'read' | 'write'): boolean {
     return true
   }
 }
