@@ -1,0 +1,102 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## プロジェクト概要
+
+このリポジトリは、ユーザーが権限管理システムを学習するための実装サンプルを提供します。メモリ内で動作する権限管理システムで、以下の実装パターンを含みます：
+
+- **Linuxベースのパーミッションシステム**: Unix形式の権限管理（rwx形式）
+- **ACL (Access Control List)**: より細かい権限制御を実現するアクセス制御リスト
+- **RBAC (Role-Based Access Control)**: ロールベースのアクセス制御
+- **ABAC (Attribute-Based Access Control)**: 属性ベースのアクセス制御
+- **ReBAC (Relationship-Based Access Control)**: 関係性ベースのアクセス制御
+
+### 開発方針
+
+- **学習目的**: このプロジェクトは権限管理を学ぶための教育的なリポジトリです
+- **実装分担**: 
+  - プロダクションコードの実装はユーザーが行います
+  - テストコードについてはClaudeCodeに実装を依頼する場合があります
+- **コード品質**: 学習しやすさを重視し、シンプルで理解しやすい実装を心がけます
+
+## 開発環境
+
+- **ランタイム**: Bun（最新バージョン）
+- **言語**: TypeScript
+- **ツール管理**: mise
+
+## 主要なコマンド
+
+### 環境セットアップ
+```bash
+# miseを使用してBunをインストール
+mise install
+```
+
+### テストの実行
+```bash
+# 現在テストファイルが空のため、実装後に以下のコマンドで実行
+bun test
+```
+
+### TypeScriptの型チェック
+```bash
+bun run typecheck
+# または
+bunx tsc --noEmit
+```
+
+## コードアーキテクチャ
+
+### ディレクトリ構造
+
+```
+src/
+├── user-based-permission/    # Linuxベースのパーミッションシステム
+├── acl/                     # Access Control List実装
+├── rbac/                    # Role-Based Access Control実装
+├── abac/                    # Attribute-Based Access Control実装
+└── rebac/                   # Relationship-Based Access Control実装
+```
+
+### 実装済みコンポーネント
+
+#### 1. Linuxベースのパーミッションシステム
+
+**TraditionalPermissions クラス** (`src/user-based-permission/user-based-permission.ts`)
+- Unix形式の権限管理システムの中心的なクラス
+- リソース管理、権限設定、権限チェックの機能を提供
+
+**型定義**
+- **Permission**: 読み取り、書き込み、実行の権限を表す
+- **UnixPermissions**: 所有者、グループ、その他のユーザーの権限セット
+- **UnixResource**: IDを持つリソースで、所有者、グループ、権限情報を含む
+
+**主要メソッド**
+- `addResource/removeResource`: リソースの追加・削除
+- `chmod/chown/chgrp`: Unix形式の権限・所有者変更
+- `checkPermission`: 権限チェックの主要メソッド
+- `addUserToGroup/removeUserFromGroup`: グループメンバーシップ管理
+
+### 実装予定のコンポーネント
+
+- **ACL**: 個別のユーザー/グループに対する詳細な権限設定
+- **RBAC**: ロールを通じた権限管理
+- **ABAC**: 属性（時間、場所、部門等）に基づく動的な権限制御
+- **ReBAC**: エンティティ間の関係性に基づく権限制御
+
+## 開発時の注意点
+
+### ClaudeCodeへの指示
+
+- プロダクションコードの実装はユーザーが行うため、実装の提案やアドバイスに留めてください
+- テストコードの実装を依頼された場合は、積極的に実装してください
+- 各権限管理パターンの概念や違いについて質問された場合は、詳しく説明してください
+
+### 技術的な注意点
+
+- 現在は型定義とインターフェースのみが実装されており、実装本体は今後追加される予定
+- テストファイルは作成されているが、まだテストケースは記述されていない
+- Bunのランタイムを使用しているため、Node.js固有のAPIを使用する際は注意が必要
+- 各権限管理パターンは独立して実装され、相互に依存しないように設計する
