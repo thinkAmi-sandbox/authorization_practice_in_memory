@@ -1,16 +1,16 @@
 // types
-type PermissionBits = {
+export type PermissionBits = {
   read: boolean
   write: boolean
 }
 
-type Mode = {
+export type Mode = {
   owner: PermissionBits
   group: PermissionBits
   others: PermissionBits
 }
 
-type UnixResource = {
+export type UnixResource = {
   name: string
   owner: string
   group: string
@@ -18,7 +18,7 @@ type UnixResource = {
 }
 
 // class
-class UnixPermission {
+export class UnixPermission {
   private resource: UnixResource
 
   constructor(resource: UnixResource) {
@@ -26,9 +26,20 @@ class UnixPermission {
   }
 
   // 権限設定
-  chmod(mode: Mode): boolean
-  chown(newOwner: string): boolean
-  chgrp(newGroupName: string): boolean
+  chmod(mode: Mode): Mode {
+    this.resource.permissions = mode
+    return mode
+  }
+
+  chown(newOwner: string): string {
+    this.resource.owner = newOwner
+    return newOwner
+  }
+
+  chgrp(newGroupName: string): string {
+    this.resource.group = newGroupName
+    return newGroupName
+  }
 
   // 権限チェック（メイン）
   // 注: rootユーザーやsetuid等の特殊ケースは考慮しない
@@ -36,5 +47,7 @@ class UnixPermission {
     userName: string,
     userGroupNames: string[],
     action: 'read' | 'write'
-  ): boolean
+  ): boolean {
+    return true
+  }
 }
