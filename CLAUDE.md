@@ -68,7 +68,7 @@ src/
 
 #### 1. Linuxベースのパーミッションシステム
 
-**TraditionalPermissions クラス** (`src/user-based-permission/user-based-permission.ts`)
+**TraditionalPermissions クラス** (`src/user-based-permission/unix-permission.ts`)
 - Unix形式の権限管理システムの中心的なクラス
 - リソース管理、権限設定、権限チェックの機能を提供
 
