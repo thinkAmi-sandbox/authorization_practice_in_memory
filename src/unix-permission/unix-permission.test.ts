@@ -155,6 +155,138 @@ describe('UnixPermission', () => {
         })
       })
     })
+
+    describe('権限の優先順位の確認', () => {
+      describe('owner権限が最優先される', () => {
+        const resource: UnixResource = {
+          name: 'test.txt',
+          owner: 'alice',
+          group: 'developers',
+          permissions: {
+            owner: { read: false, write: false },
+            group: { read: true, write: true },
+            others: { read: true, write: true }
+          }
+        }
+
+        const permission = new UnixPermission(resource)
+
+        it.each([
+          {
+            title: '所有者は、groupとothersに権限があってもowner権限が適用される',
+            userName: 'alice',
+            groupNames: ['developers'],
+            action: 'read' as const,
+            expected: false
+          },
+          {
+            title: '所有者は、groupとothersに権限があってもowner権限が適用される',
+            userName: 'alice',
+            groupNames: ['developers'],
+            action: 'write' as const,
+            expected: false
+          }
+        ])('$title（$action）', ({ userName, groupNames, action, expected }) => {
+          expect(permission.hasPermission(userName, groupNames, action)).toBe(expected)
+        })
+      })
+
+      describe('group権限がothersより優先される', () => {
+        const resource: UnixResource = {
+          name: 'test.txt',
+          owner: 'alice',
+          group: 'developers',
+          permissions: {
+            owner: { read: true, write: true },
+            group: { read: false, write: false },
+            others: { read: true, write: true }
+          }
+        }
+
+        const permission = new UnixPermission(resource)
+
+        it.each([
+          {
+            title: 'グループメンバーは、othersに権限があってもgroup権限が適用される',
+            userName: 'bob',
+            groupNames: ['developers'],
+            action: 'read' as const,
+            expected: false
+          },
+          {
+            title: 'グループメンバーは、othersに権限があってもgroup権限が適用される',
+            userName: 'bob',
+            groupNames: ['developers'],
+            action: 'write' as const,
+            expected: false
+          }
+        ])('$title（$action）', ({ userName, groupNames, action, expected }) => {
+          expect(permission.hasPermission(userName, groupNames, action)).toBe(expected)
+        })
+      })
+
+      describe('優先順位のまとめ: owner > group > others', () => {
+        const resource: UnixResource = {
+          name: 'test.txt',
+          owner: 'alice',
+          group: 'developers',
+          permissions: {
+            owner: { read: true, write: false },
+            group: { read: false, write: true },
+            others: { read: true, write: true }
+          }
+        }
+
+        const permission = new UnixPermission(resource)
+
+        it.each([
+          {
+            title: '所有者aliceは、owner権限のみが適用される',
+            userName: 'alice',
+            groupNames: ['developers'],
+            action: 'read' as const,
+            expected: true
+          },
+          {
+            title: '所有者aliceは、owner権限のみが適用される',
+            userName: 'alice',
+            groupNames: ['developers'],
+            action: 'write' as const,
+            expected: false
+          },
+          {
+            title: 'グループメンバーbobは、group権限のみが適用される',
+            userName: 'bob',
+            groupNames: ['developers'],
+            action: 'read' as const,
+            expected: false
+          },
+          {
+            title: 'グループメンバーbobは、group権限のみが適用される',
+            userName: 'bob',
+            groupNames: ['developers'],
+            action: 'write' as const,
+            expected: true
+          },
+          {
+            title: 'どちらでもないcharlieは、others権限が適用される',
+            userName: 'charlie',
+            groupNames: ['admin'],
+            action: 'read' as const,
+            expected: true
+          },
+          {
+            title: 'どちらでもないcharlieは、others権限が適用される',
+            userName: 'charlie',
+            groupNames: ['admin'],
+            action: 'write' as const,
+            expected: true
+          }
+        ])('$title（$action）時の結果が $expected であること', ({ userName, groupNames, action, expected }) => {
+          expect(permission.hasPermission(userName, groupNames, action)).toBe(expected)
+        })
+      })
+    })
   })
 
   describe('chmod', () => {
