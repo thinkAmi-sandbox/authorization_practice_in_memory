@@ -44,6 +44,14 @@ export class UnixPermission {
   // 権限チェック（メイン）
   // 注: rootユーザーやsetuid等の特殊ケースは考慮しない
   hasPermission(userName: string, userGroupNames: string[], action: 'read' | 'write'): boolean {
-    return true
+    if (userName === this.resource.owner) {
+      return this.resource.permissions.owner[action]
+    }
+
+    if (userGroupNames.includes(this.resource.group)) {
+      return this.resource.permissions.group[action]
+    }
+
+    return this.resource.permissions.others[action]
   }
 }
