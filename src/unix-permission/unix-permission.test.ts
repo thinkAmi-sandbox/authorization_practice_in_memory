@@ -156,6 +156,158 @@ describe('UnixPermission', () => {
       })
     })
 
+    describe('書き込み権限について', () => {
+      describe('ownerのみ権限がある', () => {
+        const resource: UnixResource = {
+          name: 'test.txt',
+          owner: 'my_user',
+          group: 'my_group',
+          permissions: {
+            owner: { read: false, write: true },
+            group: { read: false, write: false },
+            others: { read: false, write: false }
+          }
+        }
+
+        const permission = new UnixPermission(resource)
+
+        it.each([
+          {
+            title: 'ユーザーがowner',
+            userName: 'my_user',
+            groupNames: ['another_group'],
+            expected: true
+          },
+          {
+            title: 'ユーザーが単一groupに所属',
+            userName: 'another_user',
+            groupNames: ['my_group'],
+            expected: false
+          },
+          {
+            title: 'ユーザーが複数groupに所属',
+            userName: 'another_user',
+            groupNames: ['my_group', "another_group"],
+            expected: false
+          },
+          {
+            title: 'ユーザーがowner、かつ、groupに所属',
+            userName: 'my_user',
+            groupNames: ['my_group'],
+            expected: true
+          },
+          {
+            title: 'ユーザーが何も所属していない',
+            userName: 'another_user',
+            groupNames: ['another_group'],
+            expected: false
+          }
+        ])('$title 時の結果が $expected であること', ({ userName, groupNames, expected }) => {
+          expect(permission.hasPermission(userName, groupNames, 'write')).toBe(expected)
+        })
+      })
+
+      describe('groupのみ権限がある', () => {
+        const resource: UnixResource = {
+          name: 'test.txt',
+          owner: 'my_user',
+          group: 'my_group',
+          permissions: {
+            owner: { read: false, write: false },
+            group: { read: false, write: true },
+            others: { read: false, write: false }
+          }
+        }
+
+        const permission = new UnixPermission(resource)
+
+        it.each([
+          {
+            title: 'ユーザーがowner',
+            userName: 'my_user',
+            groupNames: ['another_group'],
+            expected: false
+          },
+          {
+            title: 'ユーザーが単一groupに所属',
+            userName: 'another_user',
+            groupNames: ['my_group'],
+            expected: true
+          },
+          {
+            title: 'ユーザーが複数groupに所属',
+            userName: 'another_user',
+            groupNames: ['my_group', "another_group"],
+            expected: true
+          },
+          {
+            title: 'ユーザーがowner、かつ、groupに所属(ownerの権限が優先されるか確認)',
+            userName: 'my_user',
+            groupNames: ['my_group'],
+            expected: false
+          },
+          {
+            title: 'ユーザーが何も所属していない',
+            userName: 'another_user',
+            groupNames: ['another_group'],
+            expected: false
+          }
+        ])('$title 時の結果が $expected であること', ({ userName, groupNames, expected }) => {
+          expect(permission.hasPermission(userName, groupNames, 'write')).toBe(expected)
+        })
+      })
+
+      describe('othersのみ権限がある', () => {
+        const resource: UnixResource = {
+          name: 'test.txt',
+          owner: 'my_user',
+          group: 'my_group',
+          permissions: {
+            owner: { read: false, write: false },
+            group: { read: false, write: false },
+            others: { read: false, write: true }
+          }
+        }
+
+        const permission = new UnixPermission(resource)
+
+        it.each([
+          {
+            title: 'ユーザーがowner',
+            userName: 'my_user',
+            groupNames: ['another_group'],
+            expected: false
+          },
+          {
+            title: 'ユーザーが単一groupに所属',
+            userName: 'another_user',
+            groupNames: ['my_group'],
+            expected: false
+          },
+          {
+            title: 'ユーザーが複数groupに所属',
+            userName: 'another_user',
+            groupNames: ['my_group', "another_group"],
+            expected: false
+          },
+          {
+            title: 'ユーザーがowner、かつ、groupに所属',
+            userName: 'my_user',
+            groupNames: ['my_group'],
+            expected: false
+          },
+          {
+            title: 'ユーザーが何も所属していない',
+            userName: 'another_user',
+            groupNames: ['another_group'],
+            expected: true
+          }
+        ])('$title 時の結果が $expected であること', ({ userName, groupNames, expected }) => {
+          expect(permission.hasPermission(userName, groupNames, 'write')).toBe(expected)
+        })
+      })
+    })
+
     describe('権限の優先順位の確認', () => {
       describe('owner権限が最優先される', () => {
         const resource: UnixResource = {
