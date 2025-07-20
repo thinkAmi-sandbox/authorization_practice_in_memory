@@ -35,7 +35,7 @@ describe('UnixPermission', () => {
           {
             title: 'ユーザーが複数groupに所属',
             userName: 'another_user',
-            groupNames: ['my_group', "another_group"],
+            groupNames: ['my_group', 'another_group'],
             expected: false
           },
           {
@@ -85,7 +85,7 @@ describe('UnixPermission', () => {
           {
             title: 'ユーザーが複数groupに所属',
             userName: 'another_user',
-            groupNames: ['my_group', "another_group"],
+            groupNames: ['my_group', 'another_group'],
             expected: true
           },
           {
@@ -135,7 +135,7 @@ describe('UnixPermission', () => {
           {
             title: 'ユーザーが複数groupに所属',
             userName: 'another_user',
-            groupNames: ['my_group', "another_group"],
+            groupNames: ['my_group', 'another_group'],
             expected: false
           },
           {
@@ -149,6 +149,56 @@ describe('UnixPermission', () => {
             userName: 'another_user',
             groupNames: ['another_group'],
             expected: true
+          }
+        ])('$title 時の結果が $expected であること', ({ userName, groupNames, expected }) => {
+          expect(permission.hasPermission(userName, groupNames, 'read')).toBe(expected)
+        })
+      })
+
+      describe('誰も権限がない', () => {
+        const resource: UnixResource = {
+          name: 'test.txt',
+          owner: 'my_user',
+          group: 'my_group',
+          permissions: {
+            owner: { read: false, write: false },
+            group: { read: false, write: false },
+            others: { read: false, write: false }
+          }
+        }
+
+        const permission = new UnixPermission(resource)
+
+        it.each([
+          {
+            title: 'ユーザーがowner',
+            userName: 'my_user',
+            groupNames: ['another_group'],
+            expected: false
+          },
+          {
+            title: 'ユーザーが単一groupに所属',
+            userName: 'another_user',
+            groupNames: ['my_group'],
+            expected: false
+          },
+          {
+            title: 'ユーザーが複数groupに所属',
+            userName: 'another_user',
+            groupNames: ['my_group', 'another_group'],
+            expected: false
+          },
+          {
+            title: 'ユーザーがowner、かつ、groupに所属',
+            userName: 'my_user',
+            groupNames: ['my_group'],
+            expected: false
+          },
+          {
+            title: 'ユーザーが何も所属していない',
+            userName: 'another_user',
+            groupNames: ['another_group'],
+            expected: false
           }
         ])('$title 時の結果が $expected であること', ({ userName, groupNames, expected }) => {
           expect(permission.hasPermission(userName, groupNames, 'read')).toBe(expected)
@@ -187,7 +237,7 @@ describe('UnixPermission', () => {
           {
             title: 'ユーザーが複数groupに所属',
             userName: 'another_user',
-            groupNames: ['my_group', "another_group"],
+            groupNames: ['my_group', 'another_group'],
             expected: false
           },
           {
@@ -237,7 +287,7 @@ describe('UnixPermission', () => {
           {
             title: 'ユーザーが複数groupに所属',
             userName: 'another_user',
-            groupNames: ['my_group', "another_group"],
+            groupNames: ['my_group', 'another_group'],
             expected: true
           },
           {
@@ -287,7 +337,7 @@ describe('UnixPermission', () => {
           {
             title: 'ユーザーが複数groupに所属',
             userName: 'another_user',
-            groupNames: ['my_group', "another_group"],
+            groupNames: ['my_group', 'another_group'],
             expected: false
           },
           {
@@ -301,6 +351,56 @@ describe('UnixPermission', () => {
             userName: 'another_user',
             groupNames: ['another_group'],
             expected: true
+          }
+        ])('$title 時の結果が $expected であること', ({ userName, groupNames, expected }) => {
+          expect(permission.hasPermission(userName, groupNames, 'write')).toBe(expected)
+        })
+      })
+
+      describe('誰も権限がない', () => {
+        const resource: UnixResource = {
+          name: 'test.txt',
+          owner: 'my_user',
+          group: 'my_group',
+          permissions: {
+            owner: { read: false, write: false },
+            group: { read: false, write: false },
+            others: { read: false, write: false }
+          }
+        }
+
+        const permission = new UnixPermission(resource)
+
+        it.each([
+          {
+            title: 'ユーザーがowner',
+            userName: 'my_user',
+            groupNames: ['another_group'],
+            expected: false
+          },
+          {
+            title: 'ユーザーが単一groupに所属',
+            userName: 'another_user',
+            groupNames: ['my_group'],
+            expected: false
+          },
+          {
+            title: 'ユーザーが複数groupに所属',
+            userName: 'another_user',
+            groupNames: ['my_group', 'another_group'],
+            expected: false
+          },
+          {
+            title: 'ユーザーがowner、かつ、groupに所属',
+            userName: 'my_user',
+            groupNames: ['my_group'],
+            expected: false
+          },
+          {
+            title: 'ユーザーが何も所属していない',
+            userName: 'another_user',
+            groupNames: ['another_group'],
+            expected: false
           }
         ])('$title 時の結果が $expected であること', ({ userName, groupNames, expected }) => {
           expect(permission.hasPermission(userName, groupNames, 'write')).toBe(expected)
@@ -434,9 +534,12 @@ describe('UnixPermission', () => {
             action: 'write' as const,
             expected: true
           }
-        ])('$title（$action）時の結果が $expected であること', ({ userName, groupNames, action, expected }) => {
-          expect(permission.hasPermission(userName, groupNames, action)).toBe(expected)
-        })
+        ])(
+          '$title（$action）時の結果が $expected であること',
+          ({ userName, groupNames, action, expected }) => {
+            expect(permission.hasPermission(userName, groupNames, action)).toBe(expected)
+          }
+        )
       })
     })
   })
