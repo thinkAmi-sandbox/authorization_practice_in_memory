@@ -1,0 +1,531 @@
+# ADR: ACL (Access Control List) 学習用実装の設計
+
+## 1. ステータス
+
+- **日付**: 2025-07-21
+- **状態**: 提案
+- **決定者**: プロジェクトチーム
+
+## 2. コンテキスト
+
+### 2.1 プロジェクトの背景（権限管理システムの学習用実装）
+
+このプロジェクトは、ユーザーが権限管理システムを学習するための実装サンプルを提供することを目的としています。特にACL（Access Control List）は、Unixパーミッションよりも細かい権限制御を実現する重要な権限管理パターンです。
+
+### 2.2 ACLの位置づけ（Unixパーミッションとの違い）
+
+- **Unixパーミッション**: 所有者・グループ・その他の3つの主体に対する固定的な権限設定
+- **ACL**: 任意の数のユーザー・グループに対する個別の権限設定が可能
+
+### 2.3 想定する題材（社内ドキュメント管理システム）
+
+学習効果を高めるため、社内ドキュメント管理システムを題材として選択しました。この文脈では：
+- 実行権限は不要（ドキュメントは実行するものではない）
+- read（閲覧）とwrite（作成・更新・削除）の2つの権限で十分
+
+### 2.4 認可ライブラリの一般的な実装パターンの学習
+
+このプロジェクトでは、認可ライブラリの利用者として、その内部実装を理解することも重要な学習目的です。主要な認可ライブラリ（Spring Security、Casbin、AWS IAM、CanCanCan等）の多くは「Deny優先型」を採用しており、これは以下の理由によります：
+
+- **セキュリティの原則**: 明示的な拒否は常に優先されるべき
+- **管理の容易さ**: エントリーの順序を気にする必要がない
+- **ポリシーの合成**: 複数のポリシーソースを統合しやすい
+
+## 3. 検討した設計オプション
+
+### 3.1 データ構造の設計
+
+#### 3.1.1 文字列結合形式 vs 構造化された型
+
+**オプション1: 文字列結合形式**
+```typescript
+subject: "user:alice" | "group:admin"
+```
+
+**オプション2: 構造化された型**
+```typescript
+subject: { type: 'user' | 'group', name: string }
+```
+
+#### 3.1.2 複数リソース管理 vs 1インスタンス1リソース
+
+**オプション1: 複数リソース管理**
+- 1つのACLインスタンスで複数のリソースを管理
+- より実システムに近い
+
+**オプション2: 1インスタンス1リソース**
+- 1つのACLインスタンスが1つのリソースのみを管理
+- シンプルで理解しやすい
+
+#### 3.1.3 Subject型の設計（id vs name）
+
+**オプション1: idフィールド**
+```typescript
+{ type: 'user', id: string }
+```
+
+**オプション2: nameフィールド**
+```typescript
+{ type: 'user', name: string }
+```
+
+### 3.2 権限モデル
+
+#### 3.2.1 アクションの種類（read/write/execute vs read/write）
+
+**オプション1: 3種類（read/write/execute）**
+- Unixパーミッションと同じ
+- より多様な例が作れる
+
+**オプション2: 2種類（read/write）**
+- ドキュメント管理に特化
+- deleteはwriteに含まれる
+
+#### 3.2.2 Unix互換 vs ACL独自の権限ビット
+
+**オプション1: Unix互換**
+```typescript
+import { PermissionBits } from '../unix-permission/unix-permission'
+```
+
+**オプション2: ACL独自**
+```typescript
+export type ACLPermissionBits = { read: boolean; write: boolean; execute: boolean }
+```
+
+### 3.3 所有者の扱い
+
+#### 3.3.1 所有者特権あり（Unix方式）
+
+- 所有者は常にフルアクセス権を持つ
+- ACLエントリーに関係なく制限できない
+
+#### 3.3.2 純粋なACL（所有者も通常エントリーで制御）
+
+- 所有者も他のユーザーと同様にACLエントリーで制御
+- より柔軟で教育的
+
+### 3.4 アクセス決定結果の型設計
+
+#### 3.4.1 Optionalプロパティを持つ単一型
+
+```typescript
+type AccessDecision = {
+  granted: boolean
+  matchedEntry?: Entry
+  matchedBy?: 'user-entry' | 'group-entry'
+  denyReason?: 'no-match' | 'denied-by-entry'
+}
+```
+
+#### 3.4.2 Union型による状態分離
+
+```typescript
+type AccessDecision = 
+  | { granted: true; matchedEntry: Entry; matchedBy: string }
+  | { granted: false; reason: string }
+```
+
+#### 3.4.3 Tagged Union（判別可能なUnion型）
+
+**順序依存型向け（4つの詳細な状態）:**
+```typescript
+type AccessDecision = 
+  | { type: 'granted'; matchedEntry: Entry; matchedBy: 'user-entry' | 'group-entry' }
+  | { type: 'no-match' }
+  | { type: 'permission-denied'; matchedEntry: Entry; matchedBy: 'user-entry' | 'group-entry' }
+  | { type: 'explicit-deny'; matchedEntry: Entry; matchedBy: 'user-entry' | 'group-entry' }
+```
+
+**Deny優先型向け（3つのシンプルな状態）:**
+```typescript
+type AccessDecision = 
+  | { type: 'granted'; allowEntries: Entry[] }
+  | { type: 'denied'; denyEntry: Entry; allowEntries: Entry[] }
+  | { type: 'no-match' }
+```
+
+### 3.5 評価方式の選択
+
+#### 3.5.1 順序依存型（Order-Dependent）
+
+**特徴:**
+- エントリーは上から順に評価される
+- 最初にマッチしたエントリーが適用される
+- 例：Windows NTFS、ファイアウォールACL
+
+**利点:**
+- より細かい制御が可能
+- 例外ルールを作りやすい
+
+**欠点:**
+- エントリーの順序管理が必要
+- ポリシーの合成が困難
+
+#### 3.5.2 Deny優先型（Deny-First）
+
+**特徴:**
+- すべてのマッチするエントリーを評価
+- 1つでもDenyがあれば拒否
+- 例：Spring Security、Casbin、AWS IAM
+
+**利点:**
+- セキュリティ原則に合致（明示的な拒否を優先）
+- エントリーの順序を気にしなくてよい
+- 複数のポリシーソースを容易に統合可能
+
+**欠点:**
+- 例外的な許可が作りにくい場合がある
+
+## 4. 決定事項
+
+### 4.1 採用した設計
+
+#### 4.1.1 1インスタンス1リソース設計
+
+学習目的では、1つのインスタンスが1つのリソースを管理する設計を採用。これにより：
+- 責任範囲が明確
+- 実装がシンプル
+- 理解しやすい
+
+#### 4.1.2 構造化されたSubject型（type + name）
+
+```typescript
+export type Subject = {
+  type: 'user' | 'group'
+  name: string  // 'id'ではなく'name'を使用
+}
+```
+
+型安全性と可読性を重視した設計。
+
+#### 4.1.3 read/writeの2権限のみ
+
+ドキュメント管理システムの文脈に合わせて：
+- read: ドキュメントの閲覧
+- write: ドキュメントの作成・更新・削除
+
+#### 4.1.4 純粋なACL（所有者特権なし）
+
+所有者も通常のACLエントリーで権限を制御。これにより：
+- ACLの本質（すべてのアクセスがエントリーで制御される）を学べる
+- より柔軟な権限設定が可能
+
+#### 4.1.5 Deny優先型の評価方式
+
+認可ライブラリの一般的な実装パターンを学ぶため、Deny優先型を採用。これにより：
+- セキュリティ原則（明示的な拒否の優先）を学習
+- エントリーの順序に依存しない実装
+- 実際の認可ライブラリ（Spring Security、AWS IAM等）と同じ動作
+
+#### 4.1.6 Tagged Unionによる型安全なAccessDecision
+
+Deny優先型に合わせたシンプルな3つの結果パターン：
+- `granted`: Denyエントリーがなく、権限を持つAllowエントリーが存在
+- `denied`: Denyエントリーが1つでも存在（理由の詳細は区別しない）
+- `no-match`: マッチするエントリーが存在しない
+
+順序依存型と異なり、`permission-denied`と`explicit-deny`の区別は不要。Deny優先型では「なぜ拒否されたか」よりも「拒否されたか」が重要であるため。
+
+### 4.2 メソッドシグネチャ
+
+#### 4.2.1 checkAccessメソッド（標準的な名称）
+
+```typescript
+checkAccess(request: AccessRequest): AccessDecision
+```
+
+ACL文献で一般的な`checkAccess`を採用。
+
+#### 4.2.2 エントリー管理メソッド群（最小限）
+
+- `addEntry(entry: Entry): void`
+- `removeEntry(subject: Subject): void`
+
+学習用途では、これら2つのメソッドのみで十分。`clearEntries`も削除し、必要最小限のAPIに絞ることで、ACLの本質（エントリーの追加・削除とアクセスチェック）に集中できる。
+
+## 5. 理由と根拠
+
+### 5.1 学習効果の最大化
+
+#### 5.1.1 ACLと認可ライブラリの核心概念への集中
+
+- Deny優先型による安全なアクセス制御の理解
+- 実際の認可ライブラリと同じ評価ロジック
+- 複雑な機能（ワイルドカード、継承等）を排除
+
+#### 5.1.2 型安全性による理解の促進
+
+- Tagged Unionにより、すべての結果パターンが明示的
+- TypeScriptの型チェックが学習を支援
+
+#### 5.1.3 最小限設計の採用理由
+
+学習用途に最適化するため、以下の要素を意図的に削除：
+
+- **クエリメソッド群**: デバッグはテストコードで行うべきであり、本番コードには不要
+- **エントリー作成ヘルパー**: 型を直接扱うことで、データ構造の理解を深める
+- **clearEntries**: 学習段階では使用頻度が低い
+- **複雑なAccessDecision**: Deny優先型では「なぜ拒否されたか」の詳細は不要
+
+この最小限設計により、初学者は3つのメソッド（checkAccess、addEntry、removeEntry）に集中でき、ACLの本質を効率的に学習できる。
+
+### 5.2 Unix実装との一貫性と差別化
+
+#### 5.2.1 共通部分（PermissionBits）
+
+同じ`PermissionBits`型を使用することで、権限の概念の共通性を示す。
+
+#### 5.2.2 異なる部分（アクセスチェックインターフェース）
+
+- Unix: `hasPermission(userName, userGroups, action): boolean`
+- ACL: `checkAccess(request): AccessDecision`
+
+異なるインターフェースにより、権限管理方式の違いを明確に。
+
+### 5.3 実践的な例の作りやすさ
+
+#### 5.3.1 ドキュメント管理システムへの適合性
+
+- 社内文書の閲覧制限
+- 部門別の編集権限
+- 特定ユーザーの明示的な拒否
+
+#### 5.3.2 デバッグのしやすさ
+
+`AccessDecision`の詳細な情報により、なぜアクセスが許可/拒否されたかが明確。
+
+## 6. 結果と影響
+
+### 6.1 利点
+
+#### 6.1.1 ACLと認可ライブラリの本質的な仕組みの理解
+
+- エントリーリストによる柔軟な権限制御
+- Deny優先型のセキュリティ原則
+- Allow/Denyの明示的な制御
+- 実際の認可ライブラリと同じ動作原理
+
+#### 6.1.2 型安全なコード
+
+- コンパイル時のエラー検出
+- 網羅的なパターンマッチング
+- IDEによる補完支援
+
+#### 6.1.3 明確なエラーハンドリング
+
+3つのシンプルな結果パターンにより、適切なエラーメッセージの提供が可能。
+
+### 6.2 トレードオフ
+
+#### 6.2.1 実装のシンプルさ vs 実システムの忠実性
+
+学習効果を優先し、以下を簡略化：
+- 1インスタンス1リソース
+- 権限の継承なし
+- デフォルト権限なし
+
+#### 6.2.2 学習曲線の考慮
+
+Tagged Unionは初学者には複雑かもしれないが、型安全性の利点が上回ると判断。
+
+### 6.3 将来の拡張性
+
+#### 6.3.1 他の権限管理方式（RBAC、ABAC）への発展
+
+- 同様の設計原則（型安全性、シンプルさ）を適用可能
+- インターフェースの一貫性を保ちつつ、各方式の特徴を表現
+
+## 7. 実装例
+
+### 7.1 型定義の完全なコード
+
+```typescript
+// 権限ビット（Unix実装と同一）
+export type PermissionBits = {
+  read: boolean
+  write: boolean
+}
+
+// 権限アクション
+export type PermissionAction = keyof PermissionBits  // 'read' | 'write'
+
+// ACLエントリーの主体
+export type Subject = {
+  type: 'user' | 'group'
+  name: string
+}
+
+// ACLエントリー
+export type Entry = {
+  subject: Subject
+  permissions: PermissionBits
+  deny?: boolean  // trueなら拒否、省略またはfalseなら許可
+}
+
+// ACLで保護されるリソース
+export type Resource = {
+  name: string      // ドキュメント名
+  owner: string     // 所有者（純粋なACLでは特権なし）
+  entries: Entry[]  // Deny優先型では順序は重要でない
+}
+
+// アクセス要求
+export type AccessRequest = {
+  subject: {
+    user: string      // 要求者のユーザー名
+    groups: string[]  // 要求者が所属する全グループ
+  }
+  action: PermissionAction  // 'read' | 'write'
+}
+
+// アクセス決定（Tagged Union - Deny優先型）
+export type AccessDecision = 
+  | { type: 'granted'; allowEntries: Entry[] }  // マッチしたAllowエントリー
+  | { type: 'denied'; denyEntry: Entry; allowEntries: Entry[] }  // Denyが優先
+  | { type: 'no-match' }  // マッチするエントリーなし
+```
+
+### 7.2 クラスとヘルパー関数
+
+```typescript
+// クラス定義（最小限のAPI）
+export class AccessControlList {
+  private resource: Resource
+
+  constructor(resource: Resource): void
+
+  // アクセス可否をチェック（Deny優先型評価）
+  checkAccess(request: AccessRequest): AccessDecision
+
+  // エントリーを追加
+  addEntry(entry: Entry): void
+  
+  // エントリーを削除
+  removeEntry(subject: Subject): void
+}
+
+// 必須のヘルパー関数のみ
+export function createPermissionBits(
+  read: boolean,
+  write: boolean
+): PermissionBits
+
+// よく使う権限パターン
+export const PERMISSION_PATTERNS = {
+  READ_ONLY: { read: true, write: false },
+  READ_WRITE: { read: true, write: true },
+  NO_ACCESS: { read: false, write: false }
+} as const
+```
+
+### 7.3 使用例（最小限）
+
+```typescript
+// ACLの作成（ヘルパー関数を使わず、型を直接理解）
+const acl = new AccessControlList({
+  name: 'report.doc',
+  owner: 'alice',
+  entries: [
+    {
+      subject: { type: 'group', name: 'managers' },
+      permissions: PERMISSION_PATTERNS.READ_WRITE
+    },
+    {
+      subject: { type: 'user', name: 'intern' },
+      permissions: PERMISSION_PATTERNS.NO_ACCESS,
+      deny: true
+    }
+  ]
+})
+
+// アクセスチェック
+const decision = acl.checkAccess({
+  subject: { user: 'bob', groups: ['managers'] },
+  action: 'write'
+})
+
+// 結果の処理
+switch (decision.type) {
+  case 'granted':
+    console.log('アクセス許可')
+    break
+  case 'denied':
+    console.log('アクセス拒否')
+    break
+  case 'no-match':
+    console.log('権限設定なし')
+    break
+}
+```
+
+### 7.4 AccessDecisionの各ケースの例
+
+**granted（許可）**
+```typescript
+{
+  type: 'granted',
+  allowEntries: [
+    {
+      subject: { type: 'group', name: 'managers' },
+      permissions: { read: true, write: false }
+    },
+    {
+      subject: { type: 'user', name: 'alice' },
+      permissions: { read: true, write: true }
+    }
+  ]
+}
+```
+
+**denied（拒否）**
+```typescript
+{
+  type: 'denied',
+  denyEntry: {
+    subject: { type: 'user', name: 'intern' },
+    permissions: { read: false, write: false },
+    deny: true
+  },
+  allowEntries: [
+    {
+      subject: { type: 'group', name: 'employees' },
+      permissions: { read: true, write: false }
+    }
+  ]
+}
+```
+
+**no-match（エントリーなし）**
+```typescript
+{
+  type: 'no-match'
+}
+```
+
+## 8. 参考情報
+
+### 8.1 ACL関連の文献
+
+- POSIX ACL仕様
+- Windows ACLドキュメント
+- 各種ファイルシステムのACL実装
+
+### 8.2 既存実装の参考例
+
+**Deny優先型の実装:**
+- Spring Security (Java)
+- Casbin (Go/多言語)
+- AWS IAM
+- CanCanCan (Ruby)
+
+**順序依存型の実装:**
+- Linux `getfacl`/`setfacl`コマンド
+- Windows NTFS ACL
+- ファイアウォールルール
+
+### 8.3 関連するADR
+
+- Unix権限実装のADR（本プロジェクト内）
+- RBAC実装のADR（今後作成予定）
+- ABAC実装のADR（今後作成予定）
