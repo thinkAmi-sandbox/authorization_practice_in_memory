@@ -12,7 +12,7 @@ export type PermissionBits = {
 }
 
 // 権限アクション
-export type PermissionAction = keyof PermissionBits  // 'read' | 'write'
+export type PermissionAction = keyof PermissionBits // 'read' | 'write'
 
 // ACLエントリーの主体
 export type Subject = {
@@ -24,30 +24,29 @@ export type Subject = {
 export type Entry = {
   subject: Subject
   permissions: PermissionBits
-  deny?: boolean  // trueなら拒否、省略またはfalseなら許可
+  deny?: boolean // trueなら拒否、省略またはfalseなら許可
 }
 
 // ACLで保護されるリソース
 export type Resource = {
-  name: string      // ドキュメント名
-  owner: string     // 所有者（純粋なACLでは特権なし）
-  entries: Entry[]  // Deny優先型では順序は重要でない
+  name: string // ドキュメント名
+  entries: Entry[] // Deny優先型では順序は重要でない
 }
 
 // アクセス要求
 export type AccessRequest = {
   subject: {
-    user: string      // 要求者のユーザー名
-    groups: string[]  // 要求者が所属する全グループ
+    user: string // 要求者のユーザー名
+    groups: string[] // 要求者が所属する全グループ
   }
-  action: PermissionAction  // 'read' | 'write'
+  action: PermissionAction // 'read' | 'write'
 }
 
 // アクセス決定（Tagged Union - Deny優先型）
-export type AccessDecision = 
-  | { type: 'granted'; allowEntries: Entry[] }  // マッチしたAllowエントリー
-  | { type: 'denied'; denyEntry: Entry; allowEntries: Entry[] }  // Denyが優先
-  | { type: 'no-match' }  // マッチするエントリーなし
+export type AccessDecision =
+  | { type: 'granted'; allowEntries: Entry[] } // マッチしたAllowエントリー
+  | { type: 'denied'; denyEntry: Entry; allowEntries: Entry[] } // Denyが優先
+  | { type: 'no-match' } // マッチするエントリーなし
 
 // ==========================================
 // クラス定義
@@ -63,8 +62,16 @@ export class AccessControlList {
 
   // アクセス可否をチェック（Deny優先型評価）
   checkAccess(request: AccessRequest): AccessDecision {
-    // 実装は学習者が行う
-    throw new Error('Not implemented')
+    const matchEntries = this.resource.entries.filter((entry) => {
+      switch (entry.subject.type) {
+        case 'user':
+          return entry.subject.name === request.subject.user
+        case 'group':
+          return request.subject.groups.includes(entry.subject.name)
+      }
+    })
+
+    return { type: 'no-match' }
   }
 
   // エントリーを追加
@@ -72,7 +79,7 @@ export class AccessControlList {
     // 実装は学習者が行う
     throw new Error('Not implemented')
   }
-  
+
   // エントリーを削除
   removeEntry(subject: Subject): void {
     // 実装は学習者が行う
@@ -85,10 +92,7 @@ export class AccessControlList {
 // ==========================================
 
 // 権限ビットの作成
-export function createPermissionBits(
-  read: boolean,
-  write: boolean
-): PermissionBits {
+export function createPermissionBits(read: boolean, write: boolean): PermissionBits {
   return { read, write }
 }
 
