@@ -2,7 +2,7 @@ import { describe, test, expect, it } from 'bun:test'
 import {
   AccessControlList,
   createPermissionBits,
-  PERMISSION_PATTERNS,
+  ALLOW_PATTERNS,
   type Entry,
   type Subject,
   type AccessRequest,
@@ -22,8 +22,9 @@ describe('ACL (Access Control List)', () => {
       describe('ユーザーやユーザーが所属するグループに対して、許可や拒否が未設定', () => {
         it('マッチしない', () => {
           const anotherEntry: Entry = {
+            type: 'allow',
             subject: anotherUserSubject,
-            permissions: PERMISSION_PATTERNS.READ_ONLY
+            permissions: ALLOW_PATTERNS.READ_ONLY
           }
           const resource: Resource = { name: 'test.txt', entries: [anotherEntry] }
           const acl = new AccessControlList(resource)
@@ -42,8 +43,9 @@ describe('ACL (Access Control List)', () => {
         describe('ユーザーのみ許可', () => {
           it('許可された', () => {
             const userEntry: Entry = {
+              type: 'allow',
               subject: myUserSubject,
-              permissions: PERMISSION_PATTERNS.READ_ONLY
+              permissions: ALLOW_PATTERNS.READ_ONLY
             }
             const resource: Resource = { name: 'test.txt', entries: [userEntry] }
             const acl = new AccessControlList(resource)
@@ -61,8 +63,9 @@ describe('ACL (Access Control List)', () => {
         describe('ユーザーが所属するグループの1つで許可', () => {
           it('許可された', () => {
             const groupEntry: Entry = {
+              type: 'allow',
               subject: myGroupSubject1,
-              permissions: PERMISSION_PATTERNS.READ_ONLY
+              permissions: ALLOW_PATTERNS.READ_ONLY
             }
             const resource: Resource = { name: 'test.txt', entries: [groupEntry] }
             const acl = new AccessControlList(resource)
@@ -80,8 +83,9 @@ describe('ACL (Access Control List)', () => {
         describe('ユーザーが所属するグループのいずれかで許可', () => {
           it('許可された', () => {
             const groupEntry1: Entry = {
+              type: 'allow',
               subject: myGroupSubject1,
-              permissions: PERMISSION_PATTERNS.READ_ONLY
+              permissions: ALLOW_PATTERNS.READ_ONLY
             }
             const resource: Resource = { name: 'test.txt', entries: [groupEntry1] }
             const acl = new AccessControlList(resource)
@@ -99,12 +103,14 @@ describe('ACL (Access Control List)', () => {
         describe('ユーザーとユーザーが所属するグループで許可', () => {
           it('許可された', () => {
             const userEntry: Entry = {
+              type: 'allow',
               subject: myUserSubject,
-              permissions: PERMISSION_PATTERNS.READ_ONLY
+              permissions: ALLOW_PATTERNS.READ_ONLY
             }
             const groupEntry: Entry = {
+              type: 'allow',
               subject: myGroupSubject1,
-              permissions: PERMISSION_PATTERNS.READ_ONLY
+              permissions: ALLOW_PATTERNS.READ_ONLY
             }
             const resource: Resource = { name: 'test.txt', entries: [userEntry, groupEntry] }
             const acl = new AccessControlList(resource)

@@ -14,6 +14,10 @@ export type PermissionBits = {
 // 権限アクション
 export type PermissionAction = keyof PermissionBits // 'read' | 'write'
 
+// Branded Typesで許可用と拒否用を区別
+export type AllowPermissionBits = PermissionBits & { readonly _brand: 'allow' }
+export type DenyPermissionBits = PermissionBits & { readonly _brand: 'deny' }
+
 // ACLエントリーの主体
 export type Subject = {
   type: 'user' | 'group'
@@ -21,11 +25,17 @@ export type Subject = {
 }
 
 // ACLエントリー
-export type Entry = {
-  subject: Subject
-  permissions: PermissionBits
-  deny?: boolean // trueなら拒否、省略またはfalseなら許可
-}
+export type Entry =
+  | {
+      type: 'allow'
+      subject: Subject
+      permissions: AllowPermissionBits // 許可用パターンのみ許可
+    }
+  | {
+      type: 'deny'
+      subject: Subject
+      permissions: DenyPermissionBits // 拒否用パターンのみ許可
+    }
 
 // ACLで保護されるリソース
 export type Resource = {
@@ -101,8 +111,17 @@ export function createPermissionBits(read: boolean, write: boolean): PermissionB
 }
 
 // よく使う権限パターン
-export const PERMISSION_PATTERNS = {
-  READ_ONLY: { read: true, write: false },
-  READ_WRITE: { read: true, write: true },
-  NO_ACCESS: { read: false, write: false }
+// 許可用パターン（Allowエントリーで使用）
+export const ALLOW_PATTERNS = {
+  READ_ONLY: { read: true, write: false, _brand: 'allow' } as AllowPermissionBits,
+  WRITE_ONLY: { read: false, write: true, _brand: 'allow' } as AllowPermissionBits,
+  READ_WRITE: { read: true, write: true, _brand: 'allow' } as AllowPermissionBits,
+  NONE: { read: false, write: false, _brand: 'allow' } as AllowPermissionBits
+} as const
+
+// 拒否用パターン（Denyエントリーで使用）
+export const DENY_PATTERNS = {
+  ALL: { read: true, write: true, _brand: 'deny' } as DenyPermissionBits,
+  READ: { read: true, write: false, _brand: 'deny' } as DenyPermissionBits,
+  WRITE: { read: false, write: true, _brand: 'deny' } as DenyPermissionBits
 } as const
