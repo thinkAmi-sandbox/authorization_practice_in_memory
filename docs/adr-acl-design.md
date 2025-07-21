@@ -175,9 +175,46 @@ type AccessDecision =
   | { type: 'no-match' }
 ```
 
-### 3.6 評価方式の選択
+### 3.6 権限パターンの型安全性
 
-#### 3.6.1 順序依存型（Order-Dependent）
+#### 3.6.1 Tagged Union導入後の課題
+
+Tagged Union方式でEntry型を定義した場合、権限パターン定数の扱いに課題が生じます：
+
+**課題:**
+- 許可用のパターン（例：READ_ONLY）を拒否エントリーで使用できてしまう
+- 拒否用のパターン（例：DENY_ALL）を許可エントリーで使用すると意味が逆転
+- 型システムでこの誤用を防げない
+
+#### 3.6.2 ヘルパー関数方式
+
+**アプローチ:**
+```typescript
+function createAllowEntry(subject: Subject, pattern: AllowPattern): Entry
+function createDenyEntry(subject: Subject, pattern: DenyPattern): Entry
+```
+
+**問題点:**
+- ヘルパー関数を使わない場合、依然として誤用が可能
+- 開発者がヘルパー関数の使用を忘れる可能性
+
+#### 3.6.3 Branded Types方式
+
+**アプローチ:**
+```typescript
+type AllowPermissionBits = PermissionBits & { readonly _brand: 'allow' }
+type DenyPermissionBits = PermissionBits & { readonly _brand: 'deny' }
+```
+
+**利点:**
+- 型レベルで完全に制約
+- ヘルパー関数なしでも型安全
+- コンパイル時にエラーを検出
+- 実行時のオーバーヘッドなし（_brandは実行時に存在しない）
+
+### 3.7 評価方式の選択
+
+#### 3.7.1 順序依存型（Order-Dependent）
 
 **特徴:**
 - エントリーは上から順に評価される
@@ -192,7 +229,7 @@ type AccessDecision =
 - エントリーの順序管理が必要
 - ポリシーの合成が困難
 
-#### 3.6.2 Deny優先型（Deny-First）
+#### 3.7.2 Deny優先型（Deny-First）
 
 **特徴:**
 - すべてのマッチするエントリーを評価
@@ -344,6 +381,25 @@ Deny優先型に合わせたシンプルな3つの結果パターン：
 
 順序依存型と異なり、`permission-denied`と`explicit-deny`の区別は不要。Deny優先型では「なぜ拒否されたか」よりも「拒否されたか」が重要であるため。
 
+#### 4.1.8 Branded Typesによる権限パターンの型安全性
+
+Tagged Union導入により生じた権限パターンの誤用リスクを解決するため、Branded Types（ブランド型）を採用：
+
+```typescript
+type AllowPermissionBits = PermissionBits & { readonly _brand: 'allow' }
+type DenyPermissionBits = PermissionBits & { readonly _brand: 'deny' }
+```
+
+**採用理由:**
+1. **完全な型安全性**: 許可用パターンを拒否エントリーで使用しようとするとコンパイルエラー
+2. **実行時への影響なし**: `_brand`プロパティは型情報のみで、実行時には存在しない
+3. **開発者体験の向上**: IDEが適切な候補を提示し、誤用を即座に検出
+
+**実装方針:**
+- `ALLOW_PATTERNS`: 許可エントリー用のパターン定数
+- `DENY_PATTERNS`: 拒否エントリー用のパターン定数
+- 各パターンに適切なブランド型を付与
+
 ### 4.2 メソッドシグネチャ
 
 #### 4.2.1 checkAccessメソッド（標準的な名称）
@@ -464,6 +520,10 @@ export type PermissionBits = {
   write: boolean
 }
 
+// Branded Typesで許可用と拒否用を区別
+export type AllowPermissionBits = PermissionBits & { readonly _brand: 'allow' }
+export type DenyPermissionBits = PermissionBits & { readonly _brand: 'deny' }
+
 // 権限アクション
 export type PermissionAction = keyof PermissionBits  // 'read' | 'write'
 
@@ -473,17 +533,17 @@ export type Subject = {
   name: string
 }
 
-// ACLエントリー（Tagged Union）
+// ACLエントリー（Tagged Union + Branded Types）
 export type Entry = 
   | {
       type: 'allow'
       subject: Subject
-      permissions: PermissionBits  // true = その権限を許可
+      permissions: AllowPermissionBits  // 許可用パターンのみ許可
     }
   | {
       type: 'deny'
       subject: Subject
-      permissions: PermissionBits  // true = その権限を拒否
+      permissions: DenyPermissionBits   // 拒否用パターンのみ許可
     }
 
 // ACLで保護されるリソース
@@ -533,33 +593,68 @@ export function createPermissionBits(
   write: boolean
 ): PermissionBits
 
-// よく使う権限パターン
-export const PERMISSION_PATTERNS = {
-  READ_ONLY: { read: true, write: false },
-  READ_WRITE: { read: true, write: true },
-  NO_ACCESS: { read: false, write: false }
+// 許可用パターン（Allowエントリーで使用）
+export const ALLOW_PATTERNS = {
+  READ_ONLY: { read: true, write: false, _brand: 'allow' } as AllowPermissionBits,
+  WRITE_ONLY: { read: false, write: true, _brand: 'allow' } as AllowPermissionBits,
+  READ_WRITE: { read: true, write: true, _brand: 'allow' } as AllowPermissionBits,
+  NONE: { read: false, write: false, _brand: 'allow' } as AllowPermissionBits
+} as const
+
+// 拒否用パターン（Denyエントリーで使用）
+export const DENY_PATTERNS = {
+  ALL: { read: true, write: true, _brand: 'deny' } as DenyPermissionBits,
+  READ: { read: true, write: false, _brand: 'deny' } as DenyPermissionBits,
+  WRITE: { read: false, write: true, _brand: 'deny' } as DenyPermissionBits
 } as const
 ```
 
-### 7.3 使用例（最小限）
+### 7.3 Branded Typesの実行時の影響
+
+Branded Typesの`_brand`プロパティは型情報のみで、実行時には存在しません：
 
 ```typescript
-// ACLの作成（ヘルパー関数を使わず、型を直接理解）
+// コンパイル時の型
+const pattern = ALLOW_PATTERNS.READ_ONLY
+// { read: true, write: false, _brand: 'allow' }
+
+// 実行時の値（console.log出力）
+console.log(pattern)
+// { read: true, write: false }
+// _brandプロパティは実行時には存在しない
+```
+
+これにより：
+- 実行時のパフォーマンスへの影響なし
+- 既存のコードとの互換性維持
+- 型安全性のメリットのみを享受
+
+### 7.4 使用例（最小限）
+
+```typescript
+// ACLの作成（Branded Typesによる型安全性）
 const acl = new AccessControlList({
   name: 'report.doc',
   entries: [
     {
       type: 'allow',
       subject: { type: 'group', name: 'managers' },
-      permissions: PERMISSION_PATTERNS.READ_WRITE
+      permissions: ALLOW_PATTERNS.READ_WRITE  // 正しい使用
     },
     {
       type: 'deny',
       subject: { type: 'user', name: 'intern' },
-      permissions: PERMISSION_PATTERNS.READ_WRITE  // すべての権限を拒否
+      permissions: DENY_PATTERNS.ALL  // 正しい使用
     }
   ]
 })
+
+// コンパイルエラーの例
+// const badEntry: Entry = {
+//   type: 'allow',
+//   subject: { type: 'user', name: 'alice' },
+//   permissions: DENY_PATTERNS.ALL  // Error: Type 'DenyPermissionBits' is not assignable to type 'AllowPermissionBits'
+// }
 
 // アクセスチェック
 const decision = acl.checkAccess({
@@ -581,7 +676,7 @@ switch (decision.type) {
 }
 ```
 
-### 7.4 AccessDecisionの各ケースの例
+### 7.5 AccessDecisionの各ケースの例
 
 **granted（許可）**
 ```typescript
@@ -591,12 +686,12 @@ switch (decision.type) {
     {
       type: 'allow',
       subject: { type: 'group', name: 'managers' },
-      permissions: { read: true, write: false }
+      permissions: { read: true, write: false, _brand: 'allow' } as AllowPermissionBits
     },
     {
       type: 'allow',
       subject: { type: 'user', name: 'alice' },
-      permissions: { read: true, write: true }
+      permissions: { read: true, write: true, _brand: 'allow' } as AllowPermissionBits
     }
   ]
 }
@@ -609,13 +704,13 @@ switch (decision.type) {
   denyEntry: {
     type: 'deny',
     subject: { type: 'user', name: 'intern' },
-    permissions: { read: true, write: true }  // 両方を拒否
+    permissions: { read: true, write: true, _brand: 'deny' } as DenyPermissionBits  // 両方を拒否
   },
   allowEntries: [
     {
       type: 'allow',
       subject: { type: 'group', name: 'employees' },
-      permissions: { read: true, write: false }
+      permissions: { read: true, write: false, _brand: 'allow' } as AllowPermissionBits
     }
   ]
 }
