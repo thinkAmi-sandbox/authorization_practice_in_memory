@@ -71,7 +71,11 @@ export class AccessControlList {
       }
     })
 
-    return { type: 'no-match' }
+    if (matchEntries.length === 0) {
+      return { type: 'no-match' }
+    }
+
+    return { type: 'granted', allowEntries: matchEntries }
   }
 
   // エントリーを追加

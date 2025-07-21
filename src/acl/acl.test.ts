@@ -37,7 +37,22 @@ describe('ACL (Access Control List)', () => {
       })
 
       describe('許可のみ設定', () => {
-        describe('ユーザーのみ許可', () => {})
+        describe('ユーザーのみ許可', () => {
+          const userEntry: Entry = {
+            subject: myUserSubject,
+            permissions: PERMISSION_PATTERNS.READ_ONLY
+          }
+          const resource: Resource = { name: 'test.txt', entries: [userEntry] }
+          const acl = new AccessControlList(resource)
+
+          it('許可された', () => {
+            const actual = acl.checkAccess({
+              subject: { user: 'my_user', groups: ['my_group_1'] },
+              action: 'read'
+            })
+            expect(actual).toEqual({ type: 'granted', allowEntries: [userEntry] })
+          })
+        })
 
         describe('ユーザーが所属するグループの1つで許可', () => {})
 
