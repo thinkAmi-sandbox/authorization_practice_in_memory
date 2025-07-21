@@ -69,9 +69,39 @@ subject: { type: 'user' | 'group', name: string }
 { type: 'user', name: string }
 ```
 
-### 3.2 権限モデル
+### 3.2 エントリー型の設計
 
-#### 3.2.1 アクションの種類（read/write/execute vs read/write）
+#### 3.2.1 deny フィールド方式 vs Tagged Union 方式
+
+**オプション1: deny フィールド方式**
+```typescript
+export type Entry = {
+  subject: Subject
+  permissions: PermissionBits
+  deny?: boolean  // trueなら拒否、falseまたは省略なら許可
+}
+```
+
+**問題点:**
+- `deny: true` かつ `read: true` のような曖昧な組み合わせが可能
+- `permissions` の意味が `deny` フィールドによって変わる
+- 型システムで意図を表現できない
+
+**オプション2: Tagged Union 方式**
+```typescript
+export type Entry = 
+  | { type: 'allow'; subject: Subject; permissions: PermissionBits }
+  | { type: 'deny'; subject: Subject; permissions: PermissionBits }
+```
+
+**利点:**
+- 型安全性：コンパイル時に意図が明確
+- 一貫性：`permissions` の `true` は常に「対象となる権限」を意味
+- 明確性：AllowとDenyが明確に区別される
+
+### 3.3 権限モデル
+
+#### 3.3.1 アクションの種類（read/write/execute vs read/write）
 
 **オプション1: 3種類（read/write/execute）**
 - Unixパーミッションと同じ
@@ -81,7 +111,7 @@ subject: { type: 'user' | 'group', name: string }
 - ドキュメント管理に特化
 - deleteはwriteに含まれる
 
-#### 3.2.2 Unix互換 vs ACL独自の権限ビット
+#### 3.3.2 Unix互換 vs ACL独自の権限ビット
 
 **オプション1: Unix互換**
 ```typescript
@@ -93,21 +123,21 @@ import { PermissionBits } from '../unix-permission/unix-permission'
 export type ACLPermissionBits = { read: boolean; write: boolean; execute: boolean }
 ```
 
-### 3.3 所有者の扱い
+### 3.4 所有者の扱い
 
-#### 3.3.1 所有者特権あり（Unix方式）
+#### 3.4.1 所有者特権あり（Unix方式）
 
 - 所有者は常にフルアクセス権を持つ
 - ACLエントリーに関係なく制限できない
 
-#### 3.3.2 純粋なACL（所有者も通常エントリーで制御）
+#### 3.4.2 純粋なACL（所有者も通常エントリーで制御）
 
 - 所有者も他のユーザーと同様にACLエントリーで制御
 - より柔軟で教育的
 
-### 3.4 アクセス決定結果の型設計
+### 3.5 アクセス決定結果の型設計
 
-#### 3.4.1 Optionalプロパティを持つ単一型
+#### 3.5.1 Optionalプロパティを持つ単一型
 
 ```typescript
 type AccessDecision = {
@@ -118,7 +148,7 @@ type AccessDecision = {
 }
 ```
 
-#### 3.4.2 Union型による状態分離
+#### 3.5.2 Union型による状態分離
 
 ```typescript
 type AccessDecision = 
@@ -126,7 +156,7 @@ type AccessDecision =
   | { granted: false; reason: string }
 ```
 
-#### 3.4.3 Tagged Union（判別可能なUnion型）
+#### 3.5.3 Tagged Union（判別可能なUnion型）
 
 **順序依存型向け（4つの詳細な状態）:**
 ```typescript
@@ -145,9 +175,9 @@ type AccessDecision =
   | { type: 'no-match' }
 ```
 
-### 3.5 評価方式の選択
+### 3.6 評価方式の選択
 
-#### 3.5.1 順序依存型（Order-Dependent）
+#### 3.6.1 順序依存型（Order-Dependent）
 
 **特徴:**
 - エントリーは上から順に評価される
@@ -162,7 +192,7 @@ type AccessDecision =
 - エントリーの順序管理が必要
 - ポリシーの合成が困難
 
-#### 3.5.2 Deny優先型（Deny-First）
+#### 3.6.2 Deny優先型（Deny-First）
 
 **特徴:**
 - すべてのマッチするエントリーを評価
@@ -188,7 +218,17 @@ type AccessDecision =
 - 実装がシンプル
 - 理解しやすい
 
-#### 4.1.2 構造化されたSubject型（type + name）
+#### 4.1.2 Tagged UnionによるEntry型
+
+```typescript
+export type Entry = 
+  | { type: 'allow'; subject: Subject; permissions: PermissionBits }
+  | { type: 'deny'; subject: Subject; permissions: PermissionBits }
+```
+
+型安全性と意図の明確化を重視。`permissions`の`true`は常に「対象となる権限」を意味し、`type`フィールドで許可/拒否を明確に区別。
+
+#### 4.1.3 構造化されたSubject型（type + name）
 
 ```typescript
 export type Subject = {
@@ -199,26 +239,26 @@ export type Subject = {
 
 型安全性と可読性を重視した設計。
 
-#### 4.1.3 read/writeの2権限のみ
+#### 4.1.4 read/writeの2権限のみ
 
 ドキュメント管理システムの文脈に合わせて：
 - read: ドキュメントの閲覧
 - write: ドキュメントの作成・更新・削除
 
-#### 4.1.4 純粋なACL（所有者特権なし）
+#### 4.1.5 純粋なACL（所有者特権なし）
 
 所有者も通常のACLエントリーで権限を制御。これにより：
 - ACLの本質（すべてのアクセスがエントリーで制御される）を学べる
 - より柔軟な権限設定が可能
 
-#### 4.1.5 Deny優先型の評価方式
+#### 4.1.6 Deny優先型の評価方式
 
 認可ライブラリの一般的な実装パターンを学ぶため、Deny優先型を採用。これにより：
 - セキュリティ原則（明示的な拒否の優先）を学習
 - エントリーの順序に依存しない実装
 - 実際の認可ライブラリ（Spring Security、AWS IAM等）と同じ動作
 
-##### 4.1.5.1 同一主体への許可・拒否の重複設定
+##### 4.1.6.1 同一主体への許可・拒否の重複設定
 
 Deny優先型では、同一のユーザーまたはグループに対して、許可（Allow）と拒否（Deny）の両方のエントリーを設定することが可能です：
 
@@ -227,15 +267,15 @@ Deny優先型では、同一のユーザーまたはグループに対して、�
 entries: [
   // Aliceに読み取り許可
   {
+    type: 'allow',
     subject: { type: 'user', name: 'alice' },
-    permissions: { read: true, write: false },
-    deny: false
+    permissions: { read: true, write: false }
   },
   // 同じAliceに書き込み拒否
   {
+    type: 'deny',
     subject: { type: 'user', name: 'alice' },
-    permissions: { read: false, write: true },
-    deny: true
+    permissions: { read: false, write: true }
   }
 ]
 ```
@@ -245,20 +285,20 @@ entries: [
 entries: [
   // Developersグループに書き込み許可
   {
+    type: 'allow',
     subject: { type: 'group', name: 'developers' },
-    permissions: { read: false, write: true },
-    deny: false
+    permissions: { read: false, write: true }
   },
   // 同じDevelopersグループに読み取り拒否
   {
+    type: 'deny',
     subject: { type: 'group', name: 'developers' },
-    permissions: { read: true, write: false },
-    deny: true
+    permissions: { read: true, write: false }
   }
 ]
 ```
 
-##### 4.1.5.2 重複設定が発生する理由
+##### 4.1.6.2 重複設定が発生する理由
 
 実際のシステムでは、以下の理由で同一主体への重複設定が発生します：
 
@@ -267,7 +307,7 @@ entries: [
 3. **複数管理者による設定**: 異なる管理者が独立して権限を設定した結果
 4. **グループと個人の競合**: ユーザーが所属するグループに拒否があり、個人に許可がある場合
 
-##### 4.1.5.3 Deny優先型での競合解決
+##### 4.1.6.3 Deny優先型での競合解決
 
 Deny優先型では、以下のルールで競合を解決します：
 
@@ -288,14 +328,14 @@ const decision = {
 }
 ```
 
-##### 4.1.5.4 実装上の考慮点
+##### 4.1.6.4 実装上の考慮点
 
 1. **エントリーの管理**: 同一主体への重複エントリーを許可することで、柔軟な権限設定が可能
 2. **デバッグ情報**: `AccessDecision`に`allowEntries`と`denyEntry`の両方を含めることで、なぜ拒否されたかを追跡可能
 3. **パフォーマンス**: すべてのエントリーを評価する必要があるが、学習用途では問題にならない
 4. **将来の最適化**: 必要に応じて、同一主体のエントリーを事前に統合することも可能
 
-#### 4.1.6 Tagged Unionによる型安全なAccessDecision
+#### 4.1.7 Tagged Unionによる型安全なAccessDecision
 
 Deny優先型に合わせたシンプルな3つの結果パターン：
 - `granted`: Denyエントリーがなく、権限を持つAllowエントリーが存在
@@ -433,17 +473,22 @@ export type Subject = {
   name: string
 }
 
-// ACLエントリー
-export type Entry = {
-  subject: Subject
-  permissions: PermissionBits
-  deny?: boolean  // trueなら拒否、省略またはfalseなら許可
-}
+// ACLエントリー（Tagged Union）
+export type Entry = 
+  | {
+      type: 'allow'
+      subject: Subject
+      permissions: PermissionBits  // true = その権限を許可
+    }
+  | {
+      type: 'deny'
+      subject: Subject
+      permissions: PermissionBits  // true = その権限を拒否
+    }
 
 // ACLで保護されるリソース
 export type Resource = {
   name: string      // ドキュメント名
-  owner: string     // 所有者（純粋なACLでは特権なし）
   entries: Entry[]  // Deny優先型では順序は重要でない
 }
 
@@ -502,16 +547,16 @@ export const PERMISSION_PATTERNS = {
 // ACLの作成（ヘルパー関数を使わず、型を直接理解）
 const acl = new AccessControlList({
   name: 'report.doc',
-  owner: 'alice',
   entries: [
     {
+      type: 'allow',
       subject: { type: 'group', name: 'managers' },
       permissions: PERMISSION_PATTERNS.READ_WRITE
     },
     {
+      type: 'deny',
       subject: { type: 'user', name: 'intern' },
-      permissions: PERMISSION_PATTERNS.NO_ACCESS,
-      deny: true
+      permissions: PERMISSION_PATTERNS.READ_WRITE  // すべての権限を拒否
     }
   ]
 })
@@ -544,10 +589,12 @@ switch (decision.type) {
   type: 'granted',
   allowEntries: [
     {
+      type: 'allow',
       subject: { type: 'group', name: 'managers' },
       permissions: { read: true, write: false }
     },
     {
+      type: 'allow',
       subject: { type: 'user', name: 'alice' },
       permissions: { read: true, write: true }
     }
@@ -560,12 +607,13 @@ switch (decision.type) {
 {
   type: 'denied',
   denyEntry: {
+    type: 'deny',
     subject: { type: 'user', name: 'intern' },
-    permissions: { read: false, write: false },
-    deny: true
+    permissions: { read: true, write: true }  // 両方を拒否
   },
   allowEntries: [
     {
+      type: 'allow',
       subject: { type: 'group', name: 'employees' },
       permissions: { read: true, write: false }
     }
