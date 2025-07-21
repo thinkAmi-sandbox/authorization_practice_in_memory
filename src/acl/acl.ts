@@ -85,6 +85,15 @@ export class AccessControlList {
       return { type: 'no-match' }
     }
 
+    const denyEntry = matchEntries.find((entry) => entry.type === 'deny')
+    if (denyEntry) {
+      return {
+        type: 'denied',
+        denyEntry,
+        allowEntries: matchEntries.filter((entry) => entry !== denyEntry && entry.type === 'allow')
+      }
+    }
+
     return { type: 'granted', allowEntries: matchEntries }
   }
 

@@ -7,7 +7,8 @@ import {
   type Subject,
   type AccessRequest,
   type AccessDecision,
-  Resource
+  Resource,
+  DENY_PATTERNS
 } from './acl'
 
 describe('ACL (Access Control List)', () => {
@@ -127,7 +128,25 @@ describe('ACL (Access Control List)', () => {
       })
 
       describe('拒否のみ設定', () => {
-        describe('ユーザーのみ拒否', () => {})
+        describe('ユーザーのみ拒否', () => {
+          it('拒否された', () => {
+            const userEntry: Entry = {
+              type: 'deny',
+              subject: myUserSubject,
+              permissions: DENY_PATTERNS.READ
+            }
+            const resource: Resource = { name: 'test.txt', entries: [userEntry] }
+            const acl = new AccessControlList(resource)
+            const request: AccessRequest = {
+              subject: { user: 'my_user', groups: ['my_group_1'] },
+              action: 'read'
+            }
+
+            const actual = acl.checkAccess(request)
+
+            expect(actual).toEqual({ type: 'denied', allowEntries: [], denyEntry: userEntry })
+          })
+        })
 
         describe('ユーザーが所属するグループのいずれかで拒否', () => {})
 
