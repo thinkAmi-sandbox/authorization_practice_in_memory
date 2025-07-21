@@ -218,6 +218,83 @@ export type Subject = {
 - エントリーの順序に依存しない実装
 - 実際の認可ライブラリ（Spring Security、AWS IAM等）と同じ動作
 
+##### 4.1.5.1 同一主体への許可・拒否の重複設定
+
+Deny優先型では、同一のユーザーまたはグループに対して、許可（Allow）と拒否（Deny）の両方のエントリーを設定することが可能です：
+
+**同一ユーザーへの重複例:**
+```typescript
+entries: [
+  // Aliceに読み取り許可
+  {
+    subject: { type: 'user', name: 'alice' },
+    permissions: { read: true, write: false },
+    deny: false
+  },
+  // 同じAliceに書き込み拒否
+  {
+    subject: { type: 'user', name: 'alice' },
+    permissions: { read: false, write: true },
+    deny: true
+  }
+]
+```
+
+**同一グループへの重複例:**
+```typescript
+entries: [
+  // Developersグループに書き込み許可
+  {
+    subject: { type: 'group', name: 'developers' },
+    permissions: { read: false, write: true },
+    deny: false
+  },
+  // 同じDevelopersグループに読み取り拒否
+  {
+    subject: { type: 'group', name: 'developers' },
+    permissions: { read: true, write: false },
+    deny: true
+  }
+]
+```
+
+##### 4.1.5.2 重複設定が発生する理由
+
+実際のシステムでは、以下の理由で同一主体への重複設定が発生します：
+
+1. **管理者の意図的な設定**: 細かい権限制御のため、部分的な許可と部分的な拒否を組み合わせる
+2. **時系列的な変更**: 古い許可設定が残ったまま、新しいセキュリティポリシーで拒否を追加
+3. **複数管理者による設定**: 異なる管理者が独立して権限を設定した結果
+4. **グループと個人の競合**: ユーザーが所属するグループに拒否があり、個人に許可がある場合
+
+##### 4.1.5.3 Deny優先型での競合解決
+
+Deny優先型では、以下のルールで競合を解決します：
+
+1. **すべてのマッチするエントリーを評価**: エントリーの順序に関係なく、該当するすべてのエントリーをチェック
+2. **拒否が1つでもあれば拒否**: セキュリティの原則として、明示的な拒否は常に優先
+3. **拒否がない場合のみ許可を評価**: すべての拒否エントリーをチェックした後で、許可エントリーを確認
+
+**評価例:**
+```typescript
+// Alice（Developersグループ所属）がwriteアクセスを要求
+// エントリー: Alice個人にwrite許可、DevelopersグループにDeny
+// 結果: グループのDenyが優先され、アクセス拒否
+
+const decision = {
+  type: 'denied',
+  denyEntry: { /* Developersグループの拒否エントリー */ },
+  allowEntries: [ /* Aliceの許可エントリー */ ]  // 参考情報として含まれる
+}
+```
+
+##### 4.1.5.4 実装上の考慮点
+
+1. **エントリーの管理**: 同一主体への重複エントリーを許可することで、柔軟な権限設定が可能
+2. **デバッグ情報**: `AccessDecision`に`allowEntries`と`denyEntry`の両方を含めることで、なぜ拒否されたかを追跡可能
+3. **パフォーマンス**: すべてのエントリーを評価する必要があるが、学習用途では問題にならない
+4. **将来の最適化**: 必要に応じて、同一主体のエントリーを事前に統合することも可能
+
 #### 4.1.6 Tagged Unionによる型安全なAccessDecision
 
 Deny優先型に合わせたシンプルな3つの結果パターン：
