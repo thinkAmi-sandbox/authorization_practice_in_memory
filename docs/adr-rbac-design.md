@@ -335,9 +335,57 @@ end
 
 学習用実装としては、RBACの本質を理解するために**Denyなし**の設計が適切ですが、実用的なライブラリでは柔軟性のためにDenyをサポートすることが多いという結論に至りました。
 
-### 3.5 APIの設計
+### 3.5 権限評価ロジックの実装方法
 
-#### 3.5.1 最小限のAPI（3-4メソッド）
+#### 3.5.1 別クラスとして実装（PermissionEvaluator）
+
+```typescript
+class PermissionEvaluator {
+  evaluate(
+    userRoles: Set<RoleName>,
+    action: PermissionAction,
+    roleDefinitions: typeof ROLES
+  ): EvaluationResult
+}
+```
+- 利点：責任の分離、テスタビリティ、将来の拡張性
+- 欠点：クラス数が増える、学習時の認知負荷
+
+#### 3.5.2 関数として実装
+
+```typescript
+function evaluateRolePermissions(
+  userRoles: Set<RoleName>,
+  action: PermissionAction,
+  roleDefinitions: typeof ROLES
+): EvaluationResult
+```
+- 利点：シンプル、純粋関数として明確、副作用なし
+- 欠点：依存性注入が困難、戦略パターンの適用が困難
+
+#### 3.5.3 RbacProtectedResourceのメソッドとして実装（学習用推奨）
+
+```typescript
+class RbacProtectedResource {
+  authorize(userName: string, action: PermissionAction): AuthzDecision {
+    // パブリックメソッド：業界標準の用語
+  }
+  
+  private evaluatePermissions(
+    userRoles: Set<RoleName>,
+    action: PermissionAction
+  ): EvaluationResult {
+    // プライベートメソッド：権限評価ロジック
+  }
+}
+```
+- 利点：シンプルな設計、ACL実装との一貫性、直感的
+- 欠点：再利用性が限定的
+- **学習用実装として推奨**：認知負荷が低く、本質に集中できる
+
+### 3.6 APIの設計
+
+#### 3.6.1 最小限のAPI（3-4メソッド）
 
 ```typescript
 class RoleBasedAccessControl {
@@ -347,7 +395,7 @@ class RoleBasedAccessControl {
 }
 ```
 
-#### 3.5.2 中程度のAPI（5-7メソッド）
+#### 3.6.2 中程度のAPI（5-7メソッド）
 
 上記に加えて：
 ```typescript
@@ -356,7 +404,7 @@ class RoleBasedAccessControl {
   getPermissions(roleName: string): PermissionBits
 ```
 
-#### 3.5.3 完全なAPI（8メソッド以上）
+#### 3.6.3 完全なAPI（8メソッド以上）
 
 さらに追加：
 ```typescript
@@ -460,25 +508,53 @@ class RbacProtectedResource {
     roleManager: RoleManager,
     requirements?: RoleRequirement
   )
-  checkAccess(userName: string, action: PermissionAction): AuthzDecision
-}
-```
-
-**PermissionEvaluator API：**
-```typescript
-class PermissionEvaluator {
-  evaluate(
+  
+  // パブリックメソッド：業界標準の「authorize」を使用
+  authorize(userName: string, action: PermissionAction): AuthzDecision
+  
+  // プライベートメソッド：権限評価ロジック
+  private evaluatePermissions(
     userRoles: Set<RoleName>,
-    action: PermissionAction,
-    roleDefinitions: typeof ROLES
+    action: PermissionAction
   ): EvaluationResult
 }
 ```
 
 理由：
-- 責任の明確な分離
-- ロールの再利用性を実現
-- 実際のRBACシステムに近い設計
+- `authorize`：RBACの業界標準用語（Spring Security、Casbin等）
+- `evaluatePermissions`：ロール権限の評価・統合を表す明確な名前
+- ACLの`resolveAccess`とは異なる名前により、アルゴリズムの違いを明確化
+
+#### 4.1.7 学習用実装における設計の簡潔性
+
+学習用実装では、PermissionEvaluatorを別クラスではなく、RbacProtectedResourceのプライベートメソッドとして実装：
+
+**論理的な3層アーキテクチャの実現：**
+```typescript
+class RbacProtectedResource {
+  // 第2層：リソース保護の責任
+  authorize(userName: string, action: PermissionAction): AuthzDecision {
+    const userRoles = this.roleManager.getUserRoles(userName)
+    const evaluation = this.evaluatePermissions(userRoles, action)
+    return this.buildDecision(evaluation, this.requirements)
+  }
+  
+  // 第3層：権限評価の責任（プライベートメソッド）
+  private evaluatePermissions(
+    userRoles: Set<RoleName>,
+    action: PermissionAction
+  ): EvaluationResult {
+    // ロールから権限を導出する純粋なロジック
+    // 複数ロールの権限をOR演算で統合
+  }
+}
+```
+
+利点：
+- **認知負荷の軽減**：クラス数を最小限に抑える
+- **ACLとの一貫性**：同様のパターンで実装
+- **直感的なモデル**：リソースが自身へのアクセスを評価
+- **必要十分な設計**：学習目的には最適な複雑さ
 
 ### 4.2 型定義の詳細
 
@@ -650,11 +726,32 @@ const requirement: RoleRequirement = {
 
 #### 5.3.2 命名規則
 
-- Unix: `hasPermission`
-- ACL: `resolveAccess`
-- RBAC: `authorize` ← 業界標準の用語
-- ABAC: `evaluate`（予定）
-- ReBAC: `checkRelation`（予定）
+各権限管理方式で意図的に異なるメソッド名を使用：
+
+| 権限モデル | メソッド名 | 理由 |
+|-----------|-----------|------|
+| Unix | `hasPermission` | 権限の有無を確認 |
+| ACL | `resolveAccess` | Allow/Denyエントリーの競合を解決 |
+| RBAC | `authorize` | 業界標準の認可用語 |
+| ABAC | `evaluate` | ルール・属性を評価 |
+| ReBAC | `checkRelation` | 関係性を確認 |
+
+**名前を分ける教育的価値：**
+
+1. **概念の違いを明確化**
+   - ACL：エントリーリストを「解決（resolve）」
+   - RBAC：ロール権限を「認可（authorize）」
+   - 異なる名前により、異なるアルゴリズムであることが自然に理解できる
+
+2. **実務での標準に準拠**
+   - Spring Security：`hasAuthority()`, `authorize()`
+   - Casbin：`enforce()`, `authorize()`
+   - CASL：`can()`, `authorize()`
+   - 実際のプロジェクトで使われる用語に慣れる
+
+3. **学習者の理解促進**
+   - 各モデルの特徴的な動作を名前から推測可能
+   - 実装を見る前から、概念の違いを意識できる
 
 ## 6. 結果と影響
 
@@ -756,13 +853,13 @@ const publicDoc = new RbacProtectedResource(
 
 // Step 4: アクセスチェック
 // aliceは全てのドキュメントをeditorロールで編集可能
-const decision1 = proposal.checkAccess('alice', 'write')
+const decision1 = proposal.authorize('alice', 'write')
 // → granted（editorロールによる）
 
-const decision2 = publicDoc.checkAccess('alice', 'write')
+const decision2 = publicDoc.authorize('alice', 'write')
 // → granted（同じeditorロールが再利用される）
 
-const decision3 = budget.checkAccess('alice', 'write')
+const decision3 = budget.authorize('alice', 'write')
 // → denied（finance-managerまたはadminロールが必要）
 
 // Step 5: ロール権限の一括変更
@@ -782,22 +879,19 @@ roleManager.assignRole('emma', 'viewer')           // 読み取りのみ
 roleManager.assignRole('emma', 'finance_manager')  // 財務権限
 
 // 通常のドキュメント：viewerロールでアクセス
-const normalAccess = proposal.checkAccess('emma', 'read')
+const normalAccess = proposal.authorize('emma', 'read')
 // → granted（viewerロールによる）
 
 // 財務ドキュメント：finance-managerロールでアクセス
-const financeAccess = budget.checkAccess('emma', 'write')
+const financeAccess = budget.authorize('emma', 'write')
 // → granted（finance-managerロールによる）
 
-// 権限の統合
-const evaluator = new PermissionEvaluator()
+// 権限の統合（内部的な動作の例示）
+// RbacProtectedResourceの内部では、evaluatePermissionsメソッドが
+// 複数ロールの権限を統合して評価
 const userRoles = roleManager.getUserRoles('emma')
-const evaluation = evaluator.evaluate(
-  userRoles,
-  'write',
-  ROLES
-)
-// → finance_managerロールの権限が有効
+// → Set(['viewer', 'finance_manager'])
+// 内部で finance_manager の write 権限が有効となる
 ```
 
 ### 7.3 組織変更のシミュレーション
@@ -814,7 +908,7 @@ roleManager.revokeRole('alice', 'editor')
 roleManager.assignRole('alice', 'admin')
 
 // 3. 全リソースで即座に新しい権限が有効
-const accessAfterPromotion = budget.checkAccess('alice', 'write')
+const accessAfterPromotion = budget.authorize('alice', 'write')
 // → granted（adminロールによる、以前はアクセス不可だった）
 
 // シナリオ：一時的な権限制限
