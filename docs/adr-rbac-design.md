@@ -473,9 +473,10 @@ export type PermissionBits = {
 
 ```typescript
 export type AuthzDecision = 
-  | { type: 'granted'; matchedRoles: RoleName[]; permissions: PermissionBits }
-  | { type: 'denied'; reason: 'no-role' }
-  | { type: 'denied'; reason: 'insufficient-permission'; roles: RoleName[] }
+  | { type: 'granted'; matchedRoles: RoleName[] }
+  | { type: 'denied'; reason: 'no-roles' }
+  | { type: 'denied'; reason: 'insufficient-permissions'; userRoles: RoleName[] }
+  | { type: 'denied'; reason: 'requirement-not-met'; userRoles: RoleName[] }
 ```
 
 理由：
@@ -511,11 +512,8 @@ class RbacProtectedResource {
   // パブリックメソッド：業界標準の「authorize」を使用
   authorize(userName: UserName, action: PermissionAction): AuthzDecision
   
-  // プライベートメソッド：権限評価ロジック
-  private evaluatePermissions(
-    userRoles: Set<RoleName>,
-    action: PermissionAction
-  ): EvaluationResult
+  // 注：現在の実装では権限評価ロジックはauthorizeメソッド内に直接実装されている
+  // 将来的にプライベートメソッドとして分離することも可能
 }
 ```
 
@@ -538,14 +536,10 @@ class RbacProtectedResource {
     return this.buildDecision(evaluation, this.requirements)
   }
   
-  // プライベート：権限評価ロジック
-  private evaluatePermissions(
-    userRoles: Set<RoleName>,
-    action: PermissionAction
-  ): EvaluationResult {
-    // ロールから権限を導出する純粋なロジック
-    // 複数ロールの権限をOR演算で統合
-  }
+  // 注：現在の実装では、権限評価ロジックはauthorizeメソッド内に
+  // 直接実装されているが、概念的には以下のような責任分離が可能：
+  // - authorize: ユーザーのロール取得と結果の構築
+  // - 権限評価: ロールから権限を導出する純粋なロジック（OR演算で統合）
 }
 ```
 
@@ -589,32 +583,25 @@ export const ROLES = {
     permissions: { read: true, write: true },
     description: '全権限を持つ管理者'
   },
-  finance_manager: {
-    name: 'finance_manager' as const,
-    permissions: { read: true, write: true },
-    description: '財務関連ドキュメントの管理者'
+  auditor: {
+    name: 'auditor' as const,
+    permissions: { read: true, write: false },
+    description: '監査員'
   }
 } as const
 
 // 型の自動生成
-export type RoleName = keyof typeof ROLES  // 'viewer' | 'editor' | 'admin' | 'finance_manager'
+export type RoleName = keyof typeof ROLES  // 'viewer' | 'editor' | 'admin' | 'auditor'
 export type Role = typeof ROLES[RoleName]
 
 // リソースのロール要件
 export type RoleRequirement = 
   | { type: 'any'; roles: RoleName[] }      // いずれかのロールがあればOK
   | { type: 'all'; roles: RoleName[] }      // 全てのロールが必要
-  | { type: 'custom'; evaluate: (roles: Set<RoleName>) => boolean }
 
 // ユーザーとロールの割り当て管理
 export type UserRoleAssignment = Map<UserName, Set<RoleName>>
 
-// 権限評価結果
-export type EvaluationResult = {
-  allowed: boolean
-  matchedRoles: RoleName[]
-  effectivePermissions: PermissionBits
-}
 ```
 
 #### 4.2.2 リクエストと結果
@@ -631,7 +618,6 @@ export type AuthzDecision =
   | { 
       type: 'granted'
       matchedRoles: RoleName[]
-      effectivePermissions: PermissionBits
     }
   | { 
       type: 'denied'
@@ -645,7 +631,7 @@ export type AuthzDecision =
   | {
       type: 'denied'
       reason: 'requirement-not-met'  // リソース固有の要件を満たさない
-      details: string
+      userRoles: RoleName[]
     }
 ```
 
@@ -661,7 +647,7 @@ roleManager.assignRole('alice', 'manager') // ❌ Error: 存在しないロー�
 // ロール要件の定義も型安全
 const requirement: RoleRequirement = {
   type: 'any',
-  roles: ['admin', 'finance_manager']  // ✅ 補完が効く
+  roles: ['admin', 'auditor']  // ✅ 補完が効く
 }
 ```
 
@@ -837,7 +823,7 @@ const roleManager = new RoleManager(ROLES)
 roleManager.assignRole('alice', 'editor')          // ✅ IDE補完あり
 roleManager.assignRole('bob', 'viewer')            // ✅ 正しいロール名
 roleManager.assignRole('charlie', 'admin')         // ✅ typo不可能
-roleManager.assignRole('david', 'finance_manager') // ✅ コンパイル時チェック
+roleManager.assignRole('david', 'auditor')         // ✅ コンパイル時チェック
 
 // Step 3: 複数のリソースを保護（ロールは再利用）
 const proposal = new RbacProtectedResource(
@@ -848,7 +834,7 @@ const proposal = new RbacProtectedResource(
 const budget = new RbacProtectedResource(
   'budget-2024.xlsx',
   roleManager,
-  { type: 'any', roles: ['finance_manager', 'admin'] }  // 型安全な配列
+  { type: 'any', roles: ['auditor', 'admin'] }  // 型安全な配列
 )
 
 const publicDoc = new RbacProtectedResource(
@@ -865,7 +851,7 @@ const decision2 = publicDoc.authorize('alice', 'write')
 // → granted（同じeditorロールが再利用される）
 
 const decision3 = budget.authorize('alice', 'write')
-// → denied（finance-managerまたはadminロールが必要）
+// → denied（auditorまたはadminロールが必要）
 
 // Step 5: ロール権限の一括変更
 // editorロールの権限を読み取り専用に変更
@@ -880,23 +866,22 @@ roleManager.updateRole('editor', {
 
 ```typescript
 // ユーザーに複数ロールを割り当て
-roleManager.assignRole('emma', 'viewer')           // 読み取りのみ
-roleManager.assignRole('emma', 'finance_manager')  // 財務権限
+roleManager.assignRole('emma', 'viewer')    // 読み取りのみ
+roleManager.assignRole('emma', 'admin')     // 管理者権限
 
 // 通常のドキュメント：viewerロールでアクセス
 const normalAccess = proposal.authorize('emma', 'read')
 // → granted（viewerロールによる）
 
-// 財務ドキュメント：finance-managerロールでアクセス
-const financeAccess = budget.authorize('emma', 'write')
-// → granted（finance-managerロールによる）
+// 管理ドキュメント：adminロールでアクセス
+const adminAccess = budget.authorize('emma', 'write')
+// → granted（adminロールによる）
 
 // 権限の統合（内部的な動作の例示）
-// RbacProtectedResourceの内部では、evaluatePermissionsプライベートメソッドが
-// 複数ロールの権限を統合して評価
+// RbacProtectedResourceの内部では、複数ロールの権限が統合して評価される
 const userRoles = roleManager.getUserRoles('emma')
-// → Set(['viewer', 'finance_manager'])
-// 内部で finance_manager の write 権限が有効となる
+// → Set(['viewer', 'admin'])
+// 内部で admin の write 権限が有効となる
 ```
 
 ### 7.3 組織変更のシミュレーション
