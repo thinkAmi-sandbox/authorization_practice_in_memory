@@ -337,7 +337,7 @@ end
 
 ### 3.5 権限評価ロジックの実装方法
 
-#### 3.5.1 別クラスとして実装（PermissionEvaluator）
+#### 3.5.1 別クラスとして実装
 
 ```typescript
 class PermissionEvaluator {
@@ -418,7 +418,7 @@ class RoleBasedAccessControl {
 
 ### 4.1 採用した設計
 
-#### 4.1.1 グローバルロール管理と3層アーキテクチャ
+#### 4.1.1 グローバルロール管理と2層アーキテクチャ
 
 RBACの本質を学習するため、グローバルロール管理を採用：
 
@@ -431,11 +431,7 @@ RBACの本質を学習するため、グローバルロール管理を採用：
 - 個別リソースの保護を担当
 - RoleManagerを参照して権限チェック
 - リソース固有の要件を定義可能
-
-**第3層：権限評価層（PermissionEvaluator）**
-- ロールと権限の評価ロジック
-- 複数ロールの統合処理
-- 権限決定の中核エンジン
+- 権限評価ロジックをプライベートメソッドとして内包
 
 #### 4.1.2 フラットなロール構造（階層なし）
 
@@ -527,19 +523,19 @@ class RbacProtectedResource {
 
 #### 4.1.7 学習用実装における設計の簡潔性
 
-学習用実装では、PermissionEvaluatorを別クラスではなく、RbacProtectedResourceのプライベートメソッドとして実装：
+学習用実装では、権限評価ロジックをRbacProtectedResourceのプライベートメソッドとして実装：
 
-**論理的な3層アーキテクチャの実現：**
+**責任の明確な分離：**
 ```typescript
 class RbacProtectedResource {
-  // 第2層：リソース保護の責任
+  // パブリック：リソース保護とアクセス制御
   authorize(userName: string, action: PermissionAction): AuthzDecision {
     const userRoles = this.roleManager.getUserRoles(userName)
     const evaluation = this.evaluatePermissions(userRoles, action)
     return this.buildDecision(evaluation, this.requirements)
   }
   
-  // 第3層：権限評価の責任（プライベートメソッド）
+  // プライベート：権限評価ロジック
   private evaluatePermissions(
     userRoles: Set<RoleName>,
     action: PermissionAction
@@ -887,7 +883,7 @@ const financeAccess = budget.authorize('emma', 'write')
 // → granted（finance-managerロールによる）
 
 // 権限の統合（内部的な動作の例示）
-// RbacProtectedResourceの内部では、evaluatePermissionsメソッドが
+// RbacProtectedResourceの内部では、evaluatePermissionsプライベートメソッドが
 // 複数ロールの権限を統合して評価
 const userRoles = roleManager.getUserRoles('emma')
 // → Set(['viewer', 'finance_manager'])
