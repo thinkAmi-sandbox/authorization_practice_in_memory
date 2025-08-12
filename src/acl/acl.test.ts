@@ -220,25 +220,237 @@ describe('ACL (Access Control List)', () => {
       })
 
       describe('許可と拒否が混在', () => {
-        describe('同一ユーザーで許可と拒否', () => {})
+        describe('同一ユーザーで許可と拒否', () => {
+          it('拒否が優先されること', () => {
+            const allowEntry: Entry = {
+              type: 'allow',
+              subject: myUserSubject,
+              permissions: ALLOW_PATTERNS.READ_ONLY
+            }
+            const denyEntry: Entry = {
+              type: 'deny',
+              subject: myUserSubject,
+              permissions: DENY_PATTERNS.READ
+            }
+            const resource: Resource = { name: 'test.txt', entries: [allowEntry, denyEntry] }
+            const acl = new AccessControlList(resource)
+            const request: AccessRequest = {
+              subject: { user: 'my_user', groups: ['my_group_1'] },
+              action: 'read'
+            }
 
-        describe('ユーザーの所属する同一グループで許可と拒否', () => {})
+            const actual = acl.checkAccess(request)
 
-        describe('ユーザーに許可、ユーザーが所属する複数グループのいずれかで拒否', () => {})
+            expect(actual).toEqual({ type: 'denied', allowEntries: [allowEntry], denyEntry: denyEntry })
+          })
+        })
 
-        describe('ユーザーに許可、ユーザーが所属する複数グループで許可と拒否が混在', () => {})
+        describe('ユーザーの所属する同一グループで許可と拒否', () => {
+          it('拒否が優先されること', () => {
+            const allowEntry: Entry = {
+              type: 'allow',
+              subject: myGroupSubject1,
+              permissions: ALLOW_PATTERNS.READ_ONLY
+            }
+            const denyEntry: Entry = {
+              type: 'deny',
+              subject: myGroupSubject1,
+              permissions: DENY_PATTERNS.READ
+            }
+            const resource: Resource = { name: 'test.txt', entries: [allowEntry, denyEntry] }
+            const acl = new AccessControlList(resource)
+            const request: AccessRequest = {
+              subject: { user: 'my_user', groups: ['my_group_1'] },
+              action: 'read'
+            }
 
-        describe('ユーザーに許可、ユーザーが所属する全グループで拒否', () => {})
+            const actual = acl.checkAccess(request)
 
-        describe('ユーザーに拒否、ユーザーが所属する複数グループのいずれかで許可', () => {})
+            expect(actual).toEqual({ type: 'denied', allowEntries: [allowEntry], denyEntry: denyEntry })
+          })
+        })
 
-        describe('ユーザーに拒否、ユーザーが所属する全グループで許可', () => {})
+        describe('ユーザーに許可、ユーザーが所属する複数グループのいずれかで拒否', () => {
+          it('拒否が優先されること', () => {
+            const userAllowEntry: Entry = {
+              type: 'allow',
+              subject: myUserSubject,
+              permissions: ALLOW_PATTERNS.READ_ONLY
+            }
+            const groupDenyEntry: Entry = {
+              type: 'deny',
+              subject: myGroupSubject1,
+              permissions: DENY_PATTERNS.READ
+            }
+            const resource: Resource = { name: 'test.txt', entries: [userAllowEntry, groupDenyEntry] }
+            const acl = new AccessControlList(resource)
+            const request: AccessRequest = {
+              subject: { user: 'my_user', groups: ['my_group_1', 'my_group_2'] },
+              action: 'read'
+            }
+
+            const actual = acl.checkAccess(request)
+
+            expect(actual).toEqual({ type: 'denied', allowEntries: [userAllowEntry], denyEntry: groupDenyEntry })
+          })
+        })
+
+        describe('ユーザーに許可、ユーザーが所属する複数グループで許可と拒否が混在', () => {
+          it('拒否が優先されること', () => {
+            const userAllowEntry: Entry = {
+              type: 'allow',
+              subject: myUserSubject,
+              permissions: ALLOW_PATTERNS.READ_ONLY
+            }
+            const group1AllowEntry: Entry = {
+              type: 'allow',
+              subject: myGroupSubject1,
+              permissions: ALLOW_PATTERNS.READ_ONLY
+            }
+            const group2DenyEntry: Entry = {
+              type: 'deny',
+              subject: myGroupSubject2,
+              permissions: DENY_PATTERNS.READ
+            }
+            const resource: Resource = { name: 'test.txt', entries: [userAllowEntry, group1AllowEntry, group2DenyEntry] }
+            const acl = new AccessControlList(resource)
+            const request: AccessRequest = {
+              subject: { user: 'my_user', groups: ['my_group_1', 'my_group_2'] },
+              action: 'read'
+            }
+
+            const actual = acl.checkAccess(request)
+
+            expect(actual).toEqual({ type: 'denied', allowEntries: [userAllowEntry, group1AllowEntry], denyEntry: group2DenyEntry })
+          })
+        })
+
+        describe('ユーザーに許可、ユーザーが所属する全グループで拒否', () => {
+          it('拒否が優先されること', () => {
+            const userAllowEntry: Entry = {
+              type: 'allow',
+              subject: myUserSubject,
+              permissions: ALLOW_PATTERNS.READ_ONLY
+            }
+            const group1DenyEntry: Entry = {
+              type: 'deny',
+              subject: myGroupSubject1,
+              permissions: DENY_PATTERNS.READ
+            }
+            const group2DenyEntry: Entry = {
+              type: 'deny',
+              subject: myGroupSubject2,
+              permissions: DENY_PATTERNS.READ
+            }
+            const resource: Resource = { name: 'test.txt', entries: [userAllowEntry, group1DenyEntry, group2DenyEntry] }
+            const acl = new AccessControlList(resource)
+            const request: AccessRequest = {
+              subject: { user: 'my_user', groups: ['my_group_1', 'my_group_2'] },
+              action: 'read'
+            }
+
+            const actual = acl.checkAccess(request)
+
+            expect(actual).toEqual({ type: 'denied', allowEntries: [userAllowEntry], denyEntry: group1DenyEntry })
+          })
+        })
+
+        describe('ユーザーに拒否、ユーザーが所属する複数グループのいずれかで許可', () => {
+          it('拒否が優先されること', () => {
+            const userDenyEntry: Entry = {
+              type: 'deny',
+              subject: myUserSubject,
+              permissions: DENY_PATTERNS.READ
+            }
+            const groupAllowEntry: Entry = {
+              type: 'allow',
+              subject: myGroupSubject1,
+              permissions: ALLOW_PATTERNS.READ_ONLY
+            }
+            const resource: Resource = { name: 'test.txt', entries: [userDenyEntry, groupAllowEntry] }
+            const acl = new AccessControlList(resource)
+            const request: AccessRequest = {
+              subject: { user: 'my_user', groups: ['my_group_1', 'my_group_2'] },
+              action: 'read'
+            }
+
+            const actual = acl.checkAccess(request)
+
+            expect(actual).toEqual({ type: 'denied', allowEntries: [groupAllowEntry], denyEntry: userDenyEntry })
+          })
+        })
+
+        describe('ユーザーに拒否、ユーザーが所属する全グループで許可', () => {
+          it('拒否が優先されること', () => {
+            const userDenyEntry: Entry = {
+              type: 'deny',
+              subject: myUserSubject,
+              permissions: DENY_PATTERNS.READ
+            }
+            const group1AllowEntry: Entry = {
+              type: 'allow',
+              subject: myGroupSubject1,
+              permissions: ALLOW_PATTERNS.READ_ONLY
+            }
+            const group2AllowEntry: Entry = {
+              type: 'allow',
+              subject: myGroupSubject2,
+              permissions: ALLOW_PATTERNS.READ_ONLY
+            }
+            const resource: Resource = { name: 'test.txt', entries: [userDenyEntry, group1AllowEntry, group2AllowEntry] }
+            const acl = new AccessControlList(resource)
+            const request: AccessRequest = {
+              subject: { user: 'my_user', groups: ['my_group_1', 'my_group_2'] },
+              action: 'read'
+            }
+
+            const actual = acl.checkAccess(request)
+
+            expect(actual).toEqual({ type: 'denied', allowEntries: [group1AllowEntry, group2AllowEntry], denyEntry: userDenyEntry })
+          })
+        })
       })
 
       describe('エッジケース', () => {
-        describe('ユーザーが所属グループを持たない', () => {})
+        describe('ユーザーが所属グループを持たない', () => {
+          it('ユーザーエントリーのみで判定されること', () => {
+            const userAllowEntry: Entry = {
+              type: 'allow',
+              subject: myUserSubject,
+              permissions: ALLOW_PATTERNS.READ_ONLY
+            }
+            const groupDenyEntry: Entry = {
+              type: 'deny',
+              subject: myGroupSubject1,
+              permissions: DENY_PATTERNS.READ
+            }
+            const resource: Resource = { name: 'test.txt', entries: [userAllowEntry, groupDenyEntry] }
+            const acl = new AccessControlList(resource)
+            const request: AccessRequest = {
+              subject: { user: 'my_user', groups: [] },
+              action: 'read'
+            }
 
-        describe('リソースにエントリーが存在しない', () => {})
+            const actual = acl.checkAccess(request)
+
+            expect(actual).toEqual({ type: 'granted', allowEntries: [userAllowEntry] })
+          })
+        })
+
+        describe('リソースにエントリーが存在しない', () => {
+          it('マッチしないこと', () => {
+            const resource: Resource = { name: 'test.txt', entries: [] }
+            const acl = new AccessControlList(resource)
+            const request: AccessRequest = {
+              subject: { user: 'my_user', groups: ['my_group_1'] },
+              action: 'read'
+            }
+
+            const actual = acl.checkAccess(request)
+
+            expect(actual).toEqual({ type: 'no-match' })
+          })
+        })
       })
     })
   })
