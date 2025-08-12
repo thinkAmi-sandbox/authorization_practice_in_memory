@@ -136,12 +136,12 @@ export class RoleManager {
 // RBACで保護されたリソースクラス
 export class RbacProtectedResource {
   private resourceId: string
-  private roleManager: RoleManager
+  private roleManager?: RoleManager
   private requirements?: RoleRequirement
 
   constructor(
     resourceId: string,
-    roleManager: RoleManager,
+    roleManager?: RoleManager,
     requirements?: RoleRequirement
   ) {
     this.resourceId = resourceId
