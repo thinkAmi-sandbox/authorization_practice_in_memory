@@ -66,6 +66,11 @@ export type AuthzRequest = {
   action: PermissionAction
 }
 
+export const ErrorMessages = {
+  NO_ROLES: 'ユーザーにロールがありません',
+  NEED_ALL_ROLES: 'すべてのロールが必要です',
+} as const
+
 // 認可決定（Tagged Union）
 export type AuthzDecision = 
   | { 
@@ -75,7 +80,7 @@ export type AuthzDecision =
     }
   | { 
       type: 'denied'
-      reason: 'no-roles'  // ユーザーがロールを持っていない
+      reason: 'no-roles'  // リソースがロールを持っていない
     }
   | { 
       type: 'denied'
@@ -85,7 +90,7 @@ export type AuthzDecision =
   | {
       type: 'denied'
       reason: 'requirement-not-met'  // リソースの要件を満たさない
-      details: string
+      details: typeof ErrorMessages[keyof typeof ErrorMessages]
     }
 
 // ==========================================
@@ -104,8 +109,8 @@ export class RoleManager {
 
   // ユーザーにロールを割り当て
   assignRole(userName: UserName, roleName: RoleName): void {
-    // 実装は学習者が行う
-    throw new Error('Not implemented')
+    const existingRoles = this.getUserRoles(userName);
+    this.userRoleAssignments.set(userName, new Set([...existingRoles, roleName]))
   }
 
   // ユーザーからロールを取り消し
@@ -116,8 +121,7 @@ export class RoleManager {
 
   // ユーザーのロール一覧を取得
   getUserRoles(userName: UserName): Set<RoleName> {
-    // 実装は学習者が行う
-    throw new Error('Not implemented')
+    return this.userRoleAssignments.get(userName) || new Set();
   }
 
   // ロール定義を取得
@@ -136,13 +140,13 @@ export class RoleManager {
 // RBACで保護されたリソースクラス
 export class RbacProtectedResource {
   private resourceId: string
-  private roleManager?: RoleManager
+  private readonly roleManager?: RoleManager
   private requirements?: RoleRequirement
 
   constructor(
     resourceId: string,
     roleManager?: RoleManager,
-    requirements?: RoleRequirement
+    requirements?: RoleRequirement,
   ) {
     this.resourceId = resourceId
     this.roleManager = roleManager
@@ -151,6 +155,13 @@ export class RbacProtectedResource {
 
   // アクセス権限をチェック（業界標準の「authorize」）
   authorize(userName: UserName, action: PermissionAction): AuthzDecision {
+    if (!this.roleManager) {
+      return { type: 'denied', reason: 'no-roles' }
+    }
+
+    const existingRoles = this.roleManager.getUserRoles(userName);
+
+
     // 実装は学習者が行う
     throw new Error('Not implemented')
   }
