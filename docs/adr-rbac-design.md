@@ -106,17 +106,162 @@ type Permissions = Set<'read' | 'write'>
 
 #### 3.1.3 ロール階層の扱い
 
-**オプション1: 階層なし（フラット）**
+##### 主要ライブラリにおけるロール階層のサポート状況
+
+実際のRBACライブラリを調査した結果、階層サポートには大きな差があることが判明しました：
+
+**完全な階層サポート 🏗️**
+
+**Spring Security (Java)** - 最も成熟した実装
+```java
+// 階層定義
+RoleHierarchy hierarchy = new RoleHierarchyImpl();
+hierarchy.setHierarchy("ROLE_ADMIN > ROLE_STAFF > ROLE_USER");
+// ROLE_ADMINは自動的にROLE_STAFF, ROLE_USERの権限も持つ
+```
+
+**Casbin (Go/多言語)** - RBAC with resource roles, RBAC with domains
+```conf
+[role_definition]
+g = _, _  # ユーザー, ロール
+g2 = _, _ # ロール, ロール（階層用）
+
+# manager は employee の権限を継承
+p, alice, manager
+g2, manager, employee
+```
+
+**Keycloak (Java)** - エンタープライズ向けIAM
+- Composite Rolesという概念で階層を実現
+- 親ロールが子ロールを含む形で管理
+
+**限定的な階層サポート ⚡**
+
+**CASL (TypeScript/JavaScript)**
+```typescript
+// 明示的な階層はないが、ロールの組み合わせで実現
+defineAbilitiesFor(user) {
+  if (user.role === 'admin') {
+    can('manage', 'all') // 全権限
+  } else if (user.role === 'moderator') {
+    can(['read', 'update'], 'Post')
+    can('read', 'User')
+  }
+}
+```
+
+**node-rbac (Node.js)**
+```javascript
+// 親子関係を定義可能
+rbac.create([
+  {name: 'admin', grants: ['moderator']}, // adminはmoderatorを継承
+  {name: 'moderator', grants: ['user']},
+  {name: 'user'}
+])
+```
+
+**階層なし（フラット）📋**
+
+**Pundit (Ruby)**
+- 階層の概念なし、各ロールは独立
+- ポリシークラスで条件判定
+
+**CanCanCan (Ruby)**
+```ruby
+# 階層は手動で実装する必要がある
+if user.admin?
+  can :manage, :all
+elsif user.moderator?
+  can :read, Post
+  can :update, Post
+end
+```
+
+**accesscontrol (Node.js)**
+- フラットな権限構造
+- 継承は `extend()` で手動実装
+
+##### 階層実装のパターン
+
+**パターン1: 単純な親子関係（Spring Security型）**
+```
+ADMIN → MANAGER → EMPLOYEE → GUEST
+```
+- 一方向の継承
+- 実装が簡単
+- 循環参照の心配なし
+
+**パターン2: DAG（有向非循環グラフ）（Casbin型）**
+```
+     CEO
+    /   \
+  CTO   CFO
+   |  X  |
+  Dev   Finance
+```
+- 複数の親を持てる
+- より柔軟な組織構造
+- 循環検出が必要
+
+**パターン3: Composite Pattern（Keycloak型）**
+```typescript
+interface Role {
+  name: string
+  permissions: Permission[]
+  composedOf?: Role[] // 他のロールを含む
+}
+```
+
+##### 実装の複雑さと学習曲線
+
+| ライブラリ | 階層サポート | 実装の複雑さ | 学習への影響 |
+|----------|------------|------------|------------|
+| Spring Security | 完全 | 中 | 設定は簡単だが理解に時間がかかる |
+| Casbin | 完全 | 高 | 柔軟だが初学者には難しい |
+| Pundit | なし | 低 | シンプルで理解しやすい |
+| CASL | 限定的 | 中 | 条件ベースで直感的 |
+
+##### 学習用実装における設計オプション
+
+**オプション1: 階層なし（フラット）- 採用**
 - 各ロールは独立
 - シンプルで理解しやすい
+- Punditのような純粋なRBAC哲学に従う
+- RBACの本質（ロールによる抽象化）に集中できる
 
 **オプション2: 単純な継承**
 - 上位ロールは下位ロールの権限を含む
 - 実装が複雑化
+- 学習の焦点がぼやける可能性
 
 **オプション3: 完全な階層構造**
 - DAG（有向非循環グラフ）による表現
 - 学習用には過度に複雑
+- エンタープライズ向けの機能
+
+##### 階層なしを選択した理由
+
+1. **学習効果の最適化**
+   - RBACの基本概念（ロールによる権限の抽象化）に集中
+   - 複数ロールの権限統合（OR演算）を理解
+   - 階層の複雑さに気を取られない
+
+2. **実装の簡潔性**
+   - 循環参照チェックが不要
+   - 権限評価ロジックが単純明快
+   - デバッグが容易
+
+3. **段階的学習アプローチ**
+   - Phase 1: フラット（現在の実装）でRBACの基本を習得
+   - Phase 2: 将来的に単純な継承を追加可能
+   - Phase 3: 必要に応じてDAG実装に発展
+
+4. **業界のベストプラクティス**
+   - Punditのような純粋なRBAC実装も成功している
+   - 階層は「あれば便利」だが「必須ではない」機能
+   - 多くの組織ではフラットなロール構造で十分
+
+調査結果から、階層サポートは主要ライブラリでも分かれており、学習用実装としては階層なしのシンプルな設計が適切であるという結論に至りました。
 
 ### 3.2 ユーザー・ロール割り当ての管理
 
