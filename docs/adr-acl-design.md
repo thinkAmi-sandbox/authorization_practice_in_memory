@@ -402,13 +402,27 @@ type DenyPermissionBits = PermissionBits & { readonly _brand: 'deny' }
 
 ### 4.2 メソッドシグネチャ
 
-#### 4.2.1 checkAccessメソッド（標準的な名称）
+#### 4.2.1 resolveAccessメソッド（権限解決を表す名称）
 
 ```typescript
-checkAccess(request: AccessRequest): AccessDecision
+resolveAccess(request: AccessRequest): AccessDecision
 ```
 
-ACL文献で一般的な`checkAccess`を採用。
+**メソッド名の選定経緯:**
+
+当初は`checkAccess`を使用していたが、以下の理由により`resolveAccess`に変更：
+
+1. **検討した候補:**
+   - `checkAccess`: 汎用的すぎて具体的な処理内容が不明確
+   - `evaluateAccess`: ABAC系でよく使われるが、ACLライブラリでは一般的でない
+   - `isAllowed`: ACL系で標準的だが、booleanを返す印象を与える（実際は詳細なオブジェクトを返す）
+   - `resolveAccess`: 複数のAllow/Denyエントリーから最終決定を「解決」する意味を明確に表現
+
+2. **resolveAccessを選択した理由:**
+   - **型の整合性**: `AccessRequest`を受け取り`AccessDecision`を返すという、入出力の型名と整合
+   - **処理内容の正確な表現**: 複数のAllow/Denyエントリーから最終的なアクセス可否を「解決」
+   - **ACLの本質**: ACL（Access Control List）の「アクセス制御」という主目的と一致
+   - **返り値の性質**: 単なるboolean/権限ビットではなく、詳細な決定情報を返すことと合致
 
 #### 4.2.2 エントリー管理メソッド群（最小限）
 
@@ -441,7 +455,7 @@ ACL文献で一般的な`checkAccess`を採用。
 - **clearEntries**: 学習段階では使用頻度が低い
 - **複雑なAccessDecision**: Deny優先型では「なぜ拒否されたか」の詳細は不要
 
-この最小限設計により、初学者は3つのメソッド（checkAccess、addEntry、removeEntry）に集中でき、ACLの本質を効率的に学習できる。
+この最小限設計により、初学者は3つのメソッド（resolveAccess、addEntry、removeEntry）に集中でき、ACLの本質を効率的に学習できる。
 
 ### 5.2 Unix実装との一貫性と差別化
 
@@ -452,7 +466,7 @@ ACL文献で一般的な`checkAccess`を採用。
 #### 5.2.2 異なる部分（アクセスチェックインターフェース）
 
 - Unix: `hasPermission(userName, userGroups, action): boolean`
-- ACL: `checkAccess(request): AccessDecision`
+- ACL: `resolveAccess(request): AccessDecision`
 
 異なるインターフェースにより、権限管理方式の違いを明確に。
 
@@ -577,8 +591,8 @@ export class AccessControlList {
 
   constructor(resource: Resource): void
 
-  // アクセス可否をチェック（Deny優先型評価）
-  checkAccess(request: AccessRequest): AccessDecision
+  // アクセス可否を解決（Deny優先型評価）
+  resolveAccess(request: AccessRequest): AccessDecision
 
   // エントリーを追加
   addEntry(entry: Entry): void
@@ -657,7 +671,7 @@ const acl = new AccessControlList({
 // }
 
 // アクセスチェック
-const decision = acl.checkAccess({
+const decision = acl.resolveAccess({
   subject: { user: 'bob', groups: ['managers'] },
   action: 'write'
 })
