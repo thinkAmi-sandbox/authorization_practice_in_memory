@@ -34,15 +34,15 @@ export const ROLES = {
     permissions: { read: true, write: true },
     description: '全権限を持つ管理者'
   },
-  finance_manager: {
-    name: 'finance_manager' as const,
-    permissions: { read: true, write: true },
-    description: '財務関連ドキュメントの管理者'
+  auditor: {
+    name: 'auditor' as const,
+    permissions: { read: true, write: false },
+    description: '監査員'
   }
 } as const
 
 // 型の自動生成
-export type RoleName = keyof typeof ROLES  // 'viewer' | 'editor' | 'admin' | 'finance_manager'
+export type RoleName = keyof typeof ROLES  // 'viewer' | 'editor' | 'admin' | 'auditor'
 export type Role = typeof ROLES[RoleName]
 
 // リソースのロール要件

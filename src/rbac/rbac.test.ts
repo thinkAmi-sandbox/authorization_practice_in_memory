@@ -61,7 +61,7 @@ describe('RBAC (Role-Based Access Control)', () => {
               it('ロールの権限不足のため、拒否されること', () => {
                 const roleManager = new RoleManager(ROLES);
                 roleManager.assignRole('user1', 'viewer');
-                const requirements = { type: 'any' as const, roles: ['viewer' as const, 'editor' as const] };
+                const requirements = { type: 'any' as const, roles: ['viewer' as const, 'auditor' as const] };
                 const resource = new RbacProtectedResource('doc1', roleManager, requirements);
                 
                 const result = resource.authorize('user1', 'write');
@@ -78,8 +78,8 @@ describe('RBAC (Role-Based Access Control)', () => {
               it('ロールの権限不足のため、拒否されること', () => {
                 const roleManager = new RoleManager(ROLES);
                 roleManager.assignRole('user1', 'viewer');
-                roleManager.assignRole('user1', 'editor');
-                const requirements = { type: 'any' as const, roles: ['viewer' as const, 'editor' as const] };
+                roleManager.assignRole('user1', 'auditor');
+                const requirements = { type: 'any' as const, roles: ['viewer' as const, 'auditor' as const] };
                 const resource = new RbacProtectedResource('doc1', roleManager, requirements);
                 
                 const result = resource.authorize('user1', 'write');
@@ -87,7 +87,7 @@ describe('RBAC (Role-Based Access Control)', () => {
                 expect(result).toEqual({
                   type: 'denied',
                   reason: 'insufficient-permissions',
-                  userRoles: ['viewer', 'editor']
+                  userRoles: ['viewer', 'auditor']
                 });
               })
             })
@@ -113,7 +113,7 @@ describe('RBAC (Role-Based Access Control)', () => {
               it('ロールの権限不足のため、拒否されること', () => {
                 const roleManager = new RoleManager(ROLES);
                 roleManager.assignRole('user1', 'viewer');
-                roleManager.assignRole('user1', 'editor');
+                roleManager.assignRole('user1', 'auditor');
                 const requirements = { type: 'all' as const, roles: ['viewer' as const] };
                 const resource = new RbacProtectedResource('doc1', roleManager, requirements);
                 
@@ -131,8 +131,8 @@ describe('RBAC (Role-Based Access Control)', () => {
               it('ロールの権限不足のため、拒否されること', () => {
                 const roleManager = new RoleManager(ROLES);
                 roleManager.assignRole('user1', 'viewer');
-                roleManager.assignRole('user1', 'editor');
-                const requirements = { type: 'all' as const, roles: ['viewer' as const, 'editor' as const] };
+                roleManager.assignRole('user1', 'auditor');
+                const requirements = { type: 'all' as const, roles: ['viewer' as const, 'auditor' as const] };
                 const resource = new RbacProtectedResource('doc1', roleManager, requirements);
                 
                 const result = resource.authorize('user1', 'write');
@@ -140,7 +140,7 @@ describe('RBAC (Role-Based Access Control)', () => {
                 expect(result).toEqual({
                   type: 'denied',
                   reason: 'insufficient-permissions',
-                  userRoles: ['viewer']
+                  userRoles: ['viewer', 'auditor']
                 });
               })
             })
@@ -190,14 +190,12 @@ describe('RBAC (Role-Based Access Control)', () => {
                 const resource = new RbacProtectedResource('doc1', roleManager, requirements);
                 
                 const result = resource.authorize('user1', 'write');
-                
-                expect(result.type).toBe('granted');
-                expect(result).toMatchObject({
+
+                expect(result).toEqual({
                   type: 'granted',
+                  matchedRoles: ['editor', 'admin'],
                   effectivePermissions: { read: true, write: true }
                 });
-                // matchedRolesは複数の可能性があるため、存在と長さのみ確認
-                expect((result as any).matchedRoles.length).toBeGreaterThan(0);
               })
             })
           })
@@ -227,11 +225,11 @@ describe('RBAC (Role-Based Access Control)', () => {
                 
                 const result = resource.authorize('user1', 'write');
                 
-                expect(result).toMatchObject({
+                expect(result).toEqual({
                   type: 'denied',
-                  reason: 'requirement-not-met'
+                  reason: 'requirement-not-met',
+                  details: ''
                 });
-                expect((result as any).details).toContain('all');
               })
             })
 
@@ -244,14 +242,12 @@ describe('RBAC (Role-Based Access Control)', () => {
                 const resource = new RbacProtectedResource('doc1', roleManager, requirements);
                 
                 const result = resource.authorize('user1', 'write');
-                
-                expect(result.type).toBe('granted');
-                expect(result).toMatchObject({
+
+                expect(result).toEqual({
                   type: 'granted',
+                  matchedRoles: ['editor', 'admin'],
                   effectivePermissions: { read: true, write: true }
                 });
-                expect((result as any).matchedRoles).toContain('editor');
-                expect((result as any).matchedRoles).toContain('admin');
               })
             })
           })
