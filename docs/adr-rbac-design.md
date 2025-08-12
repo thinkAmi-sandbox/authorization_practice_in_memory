@@ -124,12 +124,14 @@ type Permissions = Set<'read' | 'write'>
 
 **オプション1: ユーザーは1つのロールのみ**
 ```typescript
-userRoles: Map<string, RoleName>  // userName -> roleName
+type UserName = string
+userRoles: Map<UserName, RoleName>  // ユーザー名 -> ロール名
 ```
 
 **オプション2: ユーザーは複数ロール可能**
 ```typescript
-userRoles: Map<string, Set<RoleName>>  // userName -> roleNames
+type UserName = string
+userRoles: Map<UserName, Set<RoleName>>  // ユーザー名 -> ロール名の集合
 ```
 
 #### 3.2.2 ロール管理のスコープ
@@ -157,7 +159,7 @@ authorize(userName: string, action: PermissionAction): boolean
 ```typescript
 type AuthzDecision = {
   granted: boolean
-  matchedRoles?: string[]
+  matchedRoles?: RoleName[]
   reason?: string
 }
 ```
@@ -444,7 +446,8 @@ RBACの本質を学習するため、グローバルロール管理を採用：
 
 ユーザーは複数のロールを持てる設計：
 ```typescript
-type UserRoleAssignment = Map<string, Set<string>>  // userName -> roleNames
+type UserName = string
+type UserRoleAssignment = Map<UserName, Set<RoleName>>
 ```
 
 理由：
@@ -470,9 +473,9 @@ export type PermissionBits = {
 
 ```typescript
 export type AuthzDecision = 
-  | { type: 'granted'; matchedRoles: string[]; permissions: PermissionBits }
+  | { type: 'granted'; matchedRoles: RoleName[]; permissions: PermissionBits }
   | { type: 'denied'; reason: 'no-role' }
-  | { type: 'denied'; reason: 'insufficient-permission'; roles: string[] }
+  | { type: 'denied'; reason: 'insufficient-permission'; roles: RoleName[] }
 ```
 
 理由：
@@ -488,11 +491,11 @@ class RoleManager {
   // コンストラクタで事前定義ロールを登録
   constructor(predefinedRoles: typeof ROLES)
   
-  assignRole(userName: string, roleName: RoleName): void
-  revokeRole(userName: string, roleName: RoleName): void
-  getUserRoles(userName: string): Set<RoleName>
+  assignRole(userName: UserName, roleName: RoleName): void
+  revokeRole(userName: UserName, roleName: RoleName): void
+  getUserRoles(userName: UserName): Set<RoleName>
   getRole(roleName: RoleName): Role
-  hasRole(userName: string, roleName: RoleName): boolean
+  hasRole(userName: UserName, roleName: RoleName): boolean
 }
 ```
 
@@ -506,7 +509,7 @@ class RbacProtectedResource {
   )
   
   // パブリックメソッド：業界標準の「authorize」を使用
-  authorize(userName: string, action: PermissionAction): AuthzDecision
+  authorize(userName: UserName, action: PermissionAction): AuthzDecision
   
   // プライベートメソッド：権限評価ロジック
   private evaluatePermissions(
@@ -529,7 +532,7 @@ class RbacProtectedResource {
 ```typescript
 class RbacProtectedResource {
   // パブリック：リソース保護とアクセス制御
-  authorize(userName: string, action: PermissionAction): AuthzDecision {
+  authorize(userName: UserName, action: PermissionAction): AuthzDecision {
     const userRoles = this.roleManager.getUserRoles(userName)
     const evaluation = this.evaluatePermissions(userRoles, action)
     return this.buildDecision(evaluation, this.requirements)
@@ -557,6 +560,9 @@ class RbacProtectedResource {
 #### 4.2.1 基本型
 
 ```typescript
+// ユーザー識別子
+export type UserName = string
+
 // 権限ビット（ACLと共通）
 export type PermissionBits = {
   read: boolean
@@ -600,10 +606,13 @@ export type RoleRequirement =
   | { type: 'all'; roles: RoleName[] }      // 全てのロールが必要
   | { type: 'custom'; evaluate: (roles: Set<RoleName>) => boolean }
 
+// ユーザーとロールの割り当て管理
+export type UserRoleAssignment = Map<UserName, Set<RoleName>>
+
 // 権限評価結果
 export type EvaluationResult = {
   allowed: boolean
-  matchedRoles: string[]
+  matchedRoles: RoleName[]
   effectivePermissions: PermissionBits
 }
 ```
@@ -613,7 +622,7 @@ export type EvaluationResult = {
 ```typescript
 // 認可リクエスト
 export type AuthzRequest = {
-  userName: string
+  userName: UserName
   action: PermissionAction
 }
 
@@ -621,7 +630,7 @@ export type AuthzRequest = {
 export type AuthzDecision = 
   | { 
       type: 'granted'
-      matchedRoles: string[]
+      matchedRoles: RoleName[]
       effectivePermissions: PermissionBits
     }
   | { 
@@ -631,7 +640,7 @@ export type AuthzDecision =
   | { 
       type: 'denied'
       reason: 'insufficient-permissions'  // ロールはあるが権限不足
-      userRoles: string[]
+      userRoles: RoleName[]
     }
   | {
       type: 'denied'
