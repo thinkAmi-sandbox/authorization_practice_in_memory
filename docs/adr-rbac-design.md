@@ -50,6 +50,8 @@ RBACの学習において重要な概念：
 ```typescript
 type RoleName = string // "editor", "viewer"
 ```
+- 利点：柔軟性が高い
+- 欠点：typoの危険性、型安全性なし
 
 **オプション2: Enum型**
 ```typescript
@@ -59,11 +61,28 @@ enum RoleName {
   ADMIN = 'admin'
 }
 ```
+- 利点：型安全
+- 欠点：拡張性が低い、値へのアクセスが冗長
 
 **オプション3: Union型**
 ```typescript
 type RoleName = 'viewer' | 'editor' | 'admin'
 ```
+- 利点：型安全、シンプル
+- 欠点：ロール定義と型定義が分離
+
+**オプション4: const assertion + typeof（推奨）**
+```typescript
+const ROLES = {
+  viewer: { name: 'viewer', permissions: {...} },
+  editor: { name: 'editor', permissions: {...} },
+  admin: { name: 'admin', permissions: {...} }
+} as const
+
+type RoleName = keyof typeof ROLES
+```
+- 利点：型安全、IDE補完、定義の一元化
+- 欠点：TypeScript特有の記法
 
 #### 3.1.2 権限の表現方法
 
@@ -113,15 +132,17 @@ userRoles: Map<string, RoleName>  // userName -> roleName
 userRoles: Map<string, Set<RoleName>>  // userName -> roleNames
 ```
 
-#### 3.2.2 リソース単位の管理
+#### 3.2.2 ロール管理のスコープ
 
-**オプション1: 1インスタンス1リソース**
-- RBACインスタンスが1つのリソースを管理
-- ロール定義もリソース単位
+**オプション1: リソース単位のロール管理**
+- 各リソースが独自のロール定義を持つ
+- ACLに近い管理方式
+- RBACの利点が見えにくい
 
-**オプション2: グローバルなロール管理**
-- ロール定義は全リソース共通
-- より実システムに近い
+**オプション2: グローバルロール管理（推奨）**
+- 組織全体でロールを一元管理
+- ロールの再利用性が高い
+- 実際のRBACシステムに近い実装
 
 ### 3.3 認可決定結果の型設計
 
@@ -349,12 +370,24 @@ class RoleBasedAccessControl {
 
 ### 4.1 採用した設計
 
-#### 4.1.1 1インスタンス1リソース設計
+#### 4.1.1 グローバルロール管理と3層アーキテクチャ
 
-学習目的では、1つのインスタンスが1つのリソースを管理する設計を採用：
-- 責任範囲が明確
-- ACL実装との一貫性
-- ロールとリソースの関係が理解しやすい
+RBACの本質を学習するため、グローバルロール管理を採用：
+
+**第1層：ロール管理層（RoleManager）**
+- 組織全体のロール定義を管理
+- ユーザーへのロール割り当てを一元管理
+- ロールの再利用性を実現
+
+**第2層：リソース保護層（RbacProtectedResource）**
+- 個別リソースの保護を担当
+- RoleManagerを参照して権限チェック
+- リソース固有の要件を定義可能
+
+**第3層：権限評価層（PermissionEvaluator）**
+- ロールと権限の評価ロジック
+- 複数ロールの統合処理
+- 権限決定の中核エンジン
 
 #### 4.1.2 フラットなロール構造（階層なし）
 
@@ -403,21 +436,49 @@ export type AuthzDecision =
 - デバッグのしやすさ
 - ACL実装との一貫性
 
-#### 4.1.6 最小限のAPI設計
+#### 4.1.6 API設計
 
+**RoleManager API：**
 ```typescript
-class RoleBasedAccessControl {
-  constructor(resource: RbacResource)
-  authorize(request: AuthzRequest): AuthzDecision
-  assignRole(userName: string, roleName: string): void
-  revokeRole(userName: string, roleName: string): void
+class RoleManager {
+  // コンストラクタで事前定義ロールを登録
+  constructor(predefinedRoles: typeof ROLES)
+  
+  assignRole(userName: string, roleName: RoleName): void
+  revokeRole(userName: string, roleName: RoleName): void
+  getUserRoles(userName: string): Set<RoleName>
+  getRole(roleName: RoleName): Role
+  hasRole(userName: string, roleName: RoleName): boolean
+}
+```
+
+**RbacProtectedResource API：**
+```typescript
+class RbacProtectedResource {
+  constructor(
+    resourceId: string,
+    roleManager: RoleManager,
+    requirements?: RoleRequirement
+  )
+  checkAccess(userName: string, action: PermissionAction): AuthzDecision
+}
+```
+
+**PermissionEvaluator API：**
+```typescript
+class PermissionEvaluator {
+  evaluate(
+    userRoles: Set<RoleName>,
+    action: PermissionAction,
+    roleDefinitions: typeof ROLES
+  ): EvaluationResult
 }
 ```
 
 理由：
-- RBACの本質的な操作に集中
-- 学習の負担を軽減
-- テストが書きやすい
+- 責任の明確な分離
+- ロールの再利用性を実現
+- 実際のRBACシステムに近い設計
 
 ### 4.2 型定義の詳細
 
@@ -433,18 +494,45 @@ export type PermissionBits = {
 // 権限アクション
 export type PermissionAction = keyof PermissionBits // 'read' | 'write'
 
-// ロール定義
-export type Role = {
-  name: string
-  permissions: PermissionBits
-  description?: string // 学習用の説明
-}
+// ロール定義（const assertionによる型安全な実装）
+export const ROLES = {
+  viewer: {
+    name: 'viewer' as const,
+    permissions: { read: true, write: false },
+    description: 'ドキュメントの閲覧のみ可能'
+  },
+  editor: {
+    name: 'editor' as const,
+    permissions: { read: true, write: true },
+    description: 'ドキュメントの閲覧と編集が可能'
+  },
+  admin: {
+    name: 'admin' as const,
+    permissions: { read: true, write: true },
+    description: '全権限を持つ管理者'
+  },
+  finance_manager: {
+    name: 'finance_manager' as const,
+    permissions: { read: true, write: true },
+    description: '財務関連ドキュメントの管理者'
+  }
+} as const
 
-// RBACで保護されるリソース
-export type RbacResource = {
-  name: string
-  roles: Role[] // 利用可能なロール
-  assignments: Map<string, Set<string>> // userName -> roleNames
+// 型の自動生成
+export type RoleName = keyof typeof ROLES  // 'viewer' | 'editor' | 'admin' | 'finance_manager'
+export type Role = typeof ROLES[RoleName]
+
+// リソースのロール要件
+export type RoleRequirement = 
+  | { type: 'any'; roles: RoleName[] }      // いずれかのロールがあればOK
+  | { type: 'all'; roles: RoleName[] }      // 全てのロールが必要
+  | { type: 'custom'; evaluate: (roles: Set<RoleName>) => boolean }
+
+// 権限評価結果
+export type EvaluationResult = {
+  allowed: boolean
+  matchedRoles: string[]
+  effectivePermissions: PermissionBits
 }
 ```
 
@@ -462,42 +550,56 @@ export type AuthzDecision =
   | { 
       type: 'granted'
       matchedRoles: string[]
-      permissions: PermissionBits
+      effectivePermissions: PermissionBits
     }
   | { 
       type: 'denied'
-      reason: 'no-role'
+      reason: 'no-roles'  // ユーザーがロールを持っていない
     }
   | { 
       type: 'denied'
-      reason: 'insufficient-permission'
-      roles: string[]
+      reason: 'insufficient-permissions'  // ロールはあるが権限不足
+      userRoles: string[]
+    }
+  | {
+      type: 'denied'
+      reason: 'requirement-not-met'  // リソース固有の要件を満たさない
+      details: string
     }
 ```
 
-### 4.3 事前定義ロール
+### 4.3 型安全な設計の利点
 
-学習用に典型的なロールを事前定義：
-
+**typo防止の仕組み：**
 ```typescript
-export const PREDEFINED_ROLES = {
-  VIEWER: {
-    name: 'viewer',
-    permissions: { read: true, write: false },
-    description: 'ドキュメントの閲覧のみ可能'
-  },
-  EDITOR: {
-    name: 'editor',
-    permissions: { read: true, write: true },
-    description: 'ドキュメントの閲覧と編集が可能'
-  },
-  ADMIN: {
-    name: 'admin',
-    permissions: { read: true, write: true },
-    description: '全権限を持つ管理者'
-  }
-} as const
+// 型安全な使用例
+roleManager.assignRole('alice', 'editor')  // ✅ OK: IDE補完も効く
+roleManager.assignRole('alice', 'editer')  // ❌ Error: typoを検出
+roleManager.assignRole('alice', 'manager') // ❌ Error: 存在しないロール
+
+// ロール要件の定義も型安全
+const requirement: RoleRequirement = {
+  type: 'any',
+  roles: ['admin', 'finance_manager']  // ✅ 補完が効く
+}
 ```
+
+**学習効果：**
+1. **実装時の安全性**: コンパイル時にエラーを検出
+2. **開発体験の向上**: IDE補完により正しいロール名を選択
+3. **保守性**: ロール追加時は`ROLES`オブジェクトを修正するだけ
+4. **実践的**: 実際のTypeScriptプロジェクトでよく使われるパターン
+
+### 4.4 ACLとの本質的な違い
+
+| 観点 | ACL | RBAC（グローバル管理） |
+|------|-----|----------------------|
+| **権限設定の単位** | リソース×ユーザー | ロール（組織全体で共通） |
+| **新規ユーザー追加** | 各リソースで個別設定 | ロール割り当てのみ |
+| **権限変更の影響** | 単一リソースのみ | 全リソースに即座に反映 |
+| **管理コスト** | O(ユーザー数 × リソース数) | O(ユーザー数 + ロール数) |
+| **ロールの再利用** | なし（概念が存在しない） | あり（複数リソースで共通使用） |
+| **組織変更への対応** | 全リソースを個別更新 | ロール定義の更新のみ |
 
 ## 5. 理由と根拠
 
@@ -625,70 +727,151 @@ type Constraint = {
 ### 7.1 基本的な使用例
 
 ```typescript
-// RBACインスタンスの作成
-const rbac = new RoleBasedAccessControl({
-  name: 'project-proposal.doc',
-  roles: [
-    PREDEFINED_ROLES.VIEWER,
-    PREDEFINED_ROLES.EDITOR,
-    PREDEFINED_ROLES.ADMIN
-  ],
-  assignments: new Map()
+// Step 1: グローバルなロール管理の初期化
+// ROLESオブジェクトから自動的にロール定義を読み込み
+const roleManager = new RoleManager(ROLES)
+
+// Step 2: ユーザーへのロール割り当て（型安全）
+roleManager.assignRole('alice', 'editor')          // ✅ IDE補完あり
+roleManager.assignRole('bob', 'viewer')            // ✅ 正しいロール名
+roleManager.assignRole('charlie', 'admin')         // ✅ typo不可能
+roleManager.assignRole('david', 'finance_manager') // ✅ コンパイル時チェック
+
+// Step 3: 複数のリソースを保護（ロールは再利用）
+const proposal = new RbacProtectedResource(
+  'project-proposal.doc',
+  roleManager
+)
+
+const budget = new RbacProtectedResource(
+  'budget-2024.xlsx',
+  roleManager,
+  { type: 'any', roles: ['finance_manager', 'admin'] }  // 型安全な配列
+)
+
+const publicDoc = new RbacProtectedResource(
+  'company-policy.doc',
+  roleManager
+)
+
+// Step 4: アクセスチェック
+// aliceは全てのドキュメントをeditorロールで編集可能
+const decision1 = proposal.checkAccess('alice', 'write')
+// → granted（editorロールによる）
+
+const decision2 = publicDoc.checkAccess('alice', 'write')
+// → granted（同じeditorロールが再利用される）
+
+const decision3 = budget.checkAccess('alice', 'write')
+// → denied（finance-managerまたはadminロールが必要）
+
+// Step 5: ロール権限の一括変更
+// editorロールの権限を読み取り専用に変更
+roleManager.updateRole('editor', {
+  ...PREDEFINED_ROLES.EDITOR,
+  permissions: { read: true, write: false }
 })
-
-// ロール割り当て
-rbac.assignRole('alice', 'editor')
-rbac.assignRole('bob', 'viewer')
-rbac.assignRole('charlie', 'admin')
-
-// 権限チェック
-const decision = rbac.authorize({
-  userName: 'alice',
-  action: 'write'
-})
-
-// 結果の処理
-switch (decision.type) {
-  case 'granted':
-    console.log(`アクセス許可: ${decision.matchedRoles.join(', ')}`)
-    break
-  case 'denied':
-    if (decision.reason === 'no-role') {
-      console.log('ロールが割り当てられていません')
-    } else {
-      console.log(`権限不足: ${decision.roles.join(', ')}`)
-    }
-    break
-}
+// → 全てのリソースでeditorの書き込み権限が即座に無効化
 ```
 
-### 7.2 複数ロールの例
+### 7.2 複数ロールの統合例
 
 ```typescript
 // ユーザーに複数ロールを割り当て
-rbac.assignRole('david', 'viewer')
-rbac.assignRole('david', 'editor')
+roleManager.assignRole('emma', 'viewer')           // 読み取りのみ
+roleManager.assignRole('emma', 'finance_manager')  // 財務権限
 
-// 権限は統合される（editor権限でwrite可能）
-const decision = rbac.authorize({
-  userName: 'david',
-  action: 'write'
-})
-// 結果: granted（editorロールによる）
+// 通常のドキュメント：viewerロールでアクセス
+const normalAccess = proposal.checkAccess('emma', 'read')
+// → granted（viewerロールによる）
+
+// 財務ドキュメント：finance-managerロールでアクセス
+const financeAccess = budget.checkAccess('emma', 'write')
+// → granted（finance-managerロールによる）
+
+// 権限の統合
+const evaluator = new PermissionEvaluator()
+const userRoles = roleManager.getUserRoles('emma')
+const evaluation = evaluator.evaluate(
+  userRoles,
+  'write',
+  ROLES
+)
+// → finance_managerロールの権限が有効
 ```
 
-### 7.3 ロールの取り消し
+### 7.3 組織変更のシミュレーション
 
 ```typescript
-// ロールの取り消し
-rbac.revokeRole('alice', 'editor')
+// シナリオ：部署異動による権限変更
 
-// 権限チェック（もはやwrite権限なし）
-const decision = rbac.authorize({
-  userName: 'alice',
-  action: 'write'
+// 1. 現在の状態確認
+const currentRoles = roleManager.getUserRoles('alice')
+// → Set<RoleName>(['editor'])  // 型安全なSet
+
+// 2. 部署異動：編集者から管理者へ昇格
+roleManager.revokeRole('alice', 'editor')
+roleManager.assignRole('alice', 'admin')
+
+// 3. 全リソースで即座に新しい権限が有効
+const accessAfterPromotion = budget.checkAccess('alice', 'write')
+// → granted（adminロールによる、以前はアクセス不可だった）
+
+// シナリオ：一時的な権限制限
+
+// 1. 監査期間中、全editorの書き込みを一時停止
+// 学習用実装では、ROLESオブジェクトは不変として扱い、
+// 実行時の権限オーバーライド機能として実装
+roleManager.overridePermissions('editor', {
+  read: true,
+  write: false  // 一時的に書き込み禁止
 })
-// 結果: denied（no-role）
+
+// 2. 全リソースで即座に反映（一括変更の威力）
+// → 100個のリソースがあっても、1回の変更で完了
+
+// 3. 監査終了後、権限を復元
+roleManager.restorePermissions('editor')  // 元の権限に戻す
+```
+
+### 7.4 ACLとの比較例
+
+```typescript
+// ACLの場合（各リソースで個別管理）
+class AclComparison {
+  manageWithAcl() {
+    // 100個のドキュメントそれぞれに対して
+    for (const doc of documents) {
+      doc.acl.grant('alice', { read: true, write: true })
+    }
+    // → 100回の設定が必要
+    
+    // aliceの権限を変更する場合
+    for (const doc of documents) {
+      doc.acl.revoke('alice', 'write')
+    }
+    // → また100回の変更が必要
+  }
+}
+
+// RBACの場合（ロール経由で一元管理）
+class RbacComparison {
+  manageWithRbac() {
+    // 1回のロール割り当て
+    roleManager.assignRole('alice', 'editor')
+    // → 全100個のドキュメントにアクセス可能
+    
+    // 権限変更も1回
+    roleManager.updateRole('editor', {
+      permissions: { read: true, write: false }
+    })
+    // → 全100個のドキュメントに即座に反映
+  }
+}
+
+// 管理コストの違い
+// ACL: O(ユーザー数 × リソース数) = O(100 × 100) = O(10,000)
+// RBAC: O(ユーザー数 + ロール数) = O(100 + 5) = O(105)
 ```
 
 ## 8. テスト戦略
