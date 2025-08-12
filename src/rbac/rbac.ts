@@ -21,22 +21,22 @@ export type PermissionAction = keyof PermissionBits // 'read' | 'write'
 export const ROLES = {
   viewer: {
     name: 'viewer' as const,
-    permissions: { read: true, write: false },
+    permissions: {read: true, write: false},
     description: 'ドキュメントの閲覧のみ可能'
   },
   editor: {
     name: 'editor' as const,
-    permissions: { read: true, write: true },
+    permissions: {read: true, write: true},
     description: 'ドキュメントの閲覧と編集が可能'
   },
   admin: {
     name: 'admin' as const,
-    permissions: { read: true, write: true },
+    permissions: {read: true, write: true},
     description: '全権限を持つ管理者'
   },
   auditor: {
     name: 'auditor' as const,
-    permissions: { read: true, write: false },
+    permissions: {read: true, write: false},
     description: '監査員'
   }
 } as const
@@ -46,51 +46,33 @@ export type RoleName = keyof typeof ROLES  // 'viewer' | 'editor' | 'admin' | 'a
 export type Role = typeof ROLES[RoleName]
 
 // リソースのロール要件
-export type RoleRequirement = 
+export type RoleRequirement =
   | { type: 'any'; roles: RoleName[] }      // いずれかのロールがあればOK
   | { type: 'all'; roles: RoleName[] }      // 全てのロールが必要
 
 // ユーザーとロールの割り当て管理
 export type UserRoleAssignment = Map<UserName, Set<RoleName>>
 
-// 権限評価結果
-export type EvaluationResult = {
-  allowed: boolean
-  matchedRoles: RoleName[]
-  effectivePermissions: PermissionBits
-}
-
-// 認可リクエスト
-export type AuthzRequest = {
-  userName: UserName
-  action: PermissionAction
-}
-
-export const ErrorMessages = {
-  NO_ROLES: 'ユーザーにロールがありません',
-  NEED_ALL_ROLES: 'すべてのロールが必要です',
-} as const
-
 // 認可決定（Tagged Union）
-export type AuthzDecision = 
-  | { 
-      type: 'granted'
-      matchedRoles: RoleName[]
-    }
-  | { 
-      type: 'denied'
-      reason: 'no-roles'  // リソースがロールを持っていない
-    }
-  | { 
-      type: 'denied'
-      reason: 'insufficient-permissions'  // ロールはあるが権限不足
-      userRoles: RoleName[]
-    }
+export type AuthzDecision =
   | {
-      type: 'denied'
-      reason: 'requirement-not-met'  // リソースの要件を満たさない
-      details: typeof ErrorMessages[keyof typeof ErrorMessages]
-    }
+  type: 'granted'
+  matchedRoles: RoleName[]
+}
+  | {
+  type: 'denied'
+  reason: 'no-roles'  // リソースがロールを持っていない
+}
+  | {
+  type: 'denied'
+  reason: 'insufficient-permissions'  // ロールはあるが権限不足
+  userRoles: RoleName[]
+}
+  | {
+  type: 'denied'
+  reason: 'requirement-not-met'  // リソースの要件を満たさない
+  userRoles: RoleName[]
+}
 
 // ==========================================
 // クラス定義
@@ -112,12 +94,6 @@ export class RoleManager {
     this.userRoleAssignments.set(userName, new Set([...existingRoles, roleName]))
   }
 
-  // ユーザーからロールを取り消し
-  revokeRole(userName: UserName, roleName: RoleName): void {
-    // 実装は学習者が行う
-    throw new Error('Not implemented')
-  }
-
   // ユーザーのロール一覧を取得
   getUserRoles(userName: UserName): Set<RoleName> {
     return this.userRoleAssignments.get(userName) || new Set();
@@ -126,12 +102,6 @@ export class RoleManager {
   // ロール定義を取得
   getRole(roleName: RoleName): Role {
     return this.roles[roleName]
-  }
-
-  // ユーザーが特定のロールを持つか確認
-  hasRole(userName: UserName, roleName: RoleName): boolean {
-    // 実装は学習者が行う
-    throw new Error('Not implemented')
   }
 }
 
@@ -154,28 +124,32 @@ export class RbacProtectedResource {
   // アクセス権限をチェック（業界標準の「authorize」）
   authorize(userName: UserName, action: PermissionAction): AuthzDecision {
     if (!this.roleManager || !this.requirements) {
-      return { type: 'denied', reason: 'no-roles' }
+      return {type: 'denied', reason: 'no-roles'}
     }
 
     const userRoles = this.roleManager.getUserRoles(userName);
+    const matchedRoles = this.requirements.roles.filter((roleName) => {
+      return userRoles.has(roleName) && this.roleManager.getRole(roleName).permissions[action];
+    })
 
-    if (this.requirements.type === 'any') {
-      const matchedRoles = this.requirements.roles.filter((roleName) =>
-      {
-        return userRoles.has(roleName) && this.roleManager.getRole(roleName).permissions[action];
-      })
+    switch (this.requirements.type) {
+      case 'any':
+        if (matchedRoles.length > 0) {
+          return {type: 'granted', matchedRoles}
+        }
+        return {type: 'denied', reason: 'insufficient-permissions', userRoles: Array.from(userRoles)}
 
-      if (matchedRoles.length > 0) {
-        return { type: 'granted', matchedRoles }
-      }
-      return { type: 'denied', reason: 'insufficient-permissions', userRoles: Array.from(userRoles) }
+      case 'all':
+        const allMatch = this.requirements.roles.every(roleName => matchedRoles.includes(roleName))
 
-    } else {
-      // すべてのロールで権限があれば権限アリとする
+        if (allMatch) {
+          return {type: 'granted', matchedRoles}
+        }
+        return {type: 'denied', reason: 'requirement-not-met', userRoles: Array.from(userRoles)}
 
+      default:
+        // 他のパターンはないので、もしここに来たら例外とする
+        throw new Error('Not implemented')
     }
-
-    // 他のパターンはないので、もしここに来たら例外とする
-    throw new Error('Not implemented')
   }
 }
