@@ -12,7 +12,7 @@ import {
 } from './acl'
 
 describe('ACL (Access Control List)', () => {
-  describe('checkAccess', () => {
+  describe('resolveAccess', () => {
     const myUserSubject: Subject = { type: 'user', name: 'my_user' }
     const anotherUserSubject: Subject = { type: 'user', name: 'another_user' }
     const myGroupSubject1: Subject = { type: 'group', name: 'my_group_1' }
@@ -34,7 +34,7 @@ describe('ACL (Access Control List)', () => {
             action: 'read'
           }
 
-          const actual = acl.checkAccess(request)
+          const actual = acl.resolveAccess(request)
 
           expect(actual).toEqual({ type: 'no-match' })
         })
@@ -55,7 +55,7 @@ describe('ACL (Access Control List)', () => {
               action: 'read'
             }
 
-            const actual = acl.checkAccess(request)
+            const actual = acl.resolveAccess(request)
 
             expect(actual).toEqual({ type: 'granted', allowEntries: [userEntry] })
           })
@@ -75,7 +75,7 @@ describe('ACL (Access Control List)', () => {
               action: 'read'
             }
 
-            const actual = acl.checkAccess(request)
+            const actual = acl.resolveAccess(request)
 
             expect(actual).toEqual({ type: 'granted', allowEntries: [groupEntry] })
           })
@@ -95,7 +95,7 @@ describe('ACL (Access Control List)', () => {
               action: 'read'
             }
 
-            const actual = acl.checkAccess(request)
+            const actual = acl.resolveAccess(request)
 
             expect(actual).toEqual({ type: 'granted', allowEntries: [groupEntry1] })
           })
@@ -120,7 +120,7 @@ describe('ACL (Access Control List)', () => {
               action: 'read'
             }
 
-            const actual = acl.checkAccess(request)
+            const actual = acl.resolveAccess(request)
 
             expect(actual).toEqual({ type: 'granted', allowEntries: [userEntry, groupEntry] })
           })
@@ -142,7 +142,7 @@ describe('ACL (Access Control List)', () => {
               action: 'read'
             }
 
-            const actual = acl.checkAccess(request)
+            const actual = acl.resolveAccess(request)
 
             expect(actual).toEqual({ type: 'denied', allowEntries: [], denyEntry: userEntry })
           })
@@ -162,7 +162,7 @@ describe('ACL (Access Control List)', () => {
               action: 'read'
             }
 
-            const actual = acl.checkAccess(request)
+            const actual = acl.resolveAccess(request)
 
             expect(actual).toEqual({ type: 'denied', allowEntries: [], denyEntry: groupEntry })
           })
@@ -187,7 +187,7 @@ describe('ACL (Access Control List)', () => {
               action: 'read'
             }
 
-            const actual = acl.checkAccess(request)
+            const actual = acl.resolveAccess(request)
 
             expect(actual).toEqual({ type: 'denied', allowEntries: [], denyEntry: groupEntry1 })
           })
@@ -212,7 +212,7 @@ describe('ACL (Access Control List)', () => {
               action: 'read'
             }
 
-            const actual = acl.checkAccess(request)
+            const actual = acl.resolveAccess(request)
 
             expect(actual).toEqual({ type: 'denied', allowEntries: [], denyEntry: userEntry })
           })
@@ -239,7 +239,7 @@ describe('ACL (Access Control List)', () => {
               action: 'read'
             }
 
-            const actual = acl.checkAccess(request)
+            const actual = acl.resolveAccess(request)
 
             expect(actual).toEqual({ type: 'denied', allowEntries: [allowEntry], denyEntry: denyEntry })
           })
@@ -264,7 +264,7 @@ describe('ACL (Access Control List)', () => {
               action: 'read'
             }
 
-            const actual = acl.checkAccess(request)
+            const actual = acl.resolveAccess(request)
 
             expect(actual).toEqual({ type: 'denied', allowEntries: [allowEntry], denyEntry: denyEntry })
           })
@@ -289,7 +289,7 @@ describe('ACL (Access Control List)', () => {
               action: 'read'
             }
 
-            const actual = acl.checkAccess(request)
+            const actual = acl.resolveAccess(request)
 
             expect(actual).toEqual({ type: 'denied', allowEntries: [userAllowEntry], denyEntry: groupDenyEntry })
           })
@@ -319,7 +319,7 @@ describe('ACL (Access Control List)', () => {
               action: 'read'
             }
 
-            const actual = acl.checkAccess(request)
+            const actual = acl.resolveAccess(request)
 
             expect(actual).toEqual({ type: 'denied', allowEntries: [userAllowEntry, group1AllowEntry], denyEntry: group2DenyEntry })
           })
@@ -349,7 +349,7 @@ describe('ACL (Access Control List)', () => {
               action: 'read'
             }
 
-            const actual = acl.checkAccess(request)
+            const actual = acl.resolveAccess(request)
 
             expect(actual).toEqual({ type: 'denied', allowEntries: [userAllowEntry], denyEntry: group1DenyEntry })
           })
@@ -374,7 +374,7 @@ describe('ACL (Access Control List)', () => {
               action: 'read'
             }
 
-            const actual = acl.checkAccess(request)
+            const actual = acl.resolveAccess(request)
 
             expect(actual).toEqual({ type: 'denied', allowEntries: [groupAllowEntry], denyEntry: userDenyEntry })
           })
@@ -404,7 +404,7 @@ describe('ACL (Access Control List)', () => {
               action: 'read'
             }
 
-            const actual = acl.checkAccess(request)
+            const actual = acl.resolveAccess(request)
 
             expect(actual).toEqual({ type: 'denied', allowEntries: [group1AllowEntry, group2AllowEntry], denyEntry: userDenyEntry })
           })
@@ -431,7 +431,7 @@ describe('ACL (Access Control List)', () => {
               action: 'read'
             }
 
-            const actual = acl.checkAccess(request)
+            const actual = acl.resolveAccess(request)
 
             expect(actual).toEqual({ type: 'granted', allowEntries: [userAllowEntry] })
           })
@@ -446,7 +446,7 @@ describe('ACL (Access Control List)', () => {
               action: 'read'
             }
 
-            const actual = acl.checkAccess(request)
+            const actual = acl.resolveAccess(request)
 
             expect(actual).toEqual({ type: 'no-match' })
           })

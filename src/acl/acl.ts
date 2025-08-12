@@ -70,8 +70,8 @@ export class AccessControlList {
     this.resource = resource
   }
 
-  // アクセス可否をチェック（Deny優先型評価）
-  checkAccess(request: AccessRequest): AccessDecision {
+  // アクセス可否を解決（Deny優先型評価）
+  resolveAccess(request: AccessRequest): AccessDecision {
     const matchEntries = this.resource.entries.filter((entry) => {
       switch (entry.subject.type) {
         case 'user':
