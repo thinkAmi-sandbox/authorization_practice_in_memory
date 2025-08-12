@@ -105,12 +105,12 @@ type Permissions = Set<'read' | 'write'>
 
 **オプション1: ユーザーは1つのロールのみ**
 ```typescript
-userRoles: Map<string, RoleName>
+userRoles: Map<string, RoleName>  // userName -> roleName
 ```
 
 **オプション2: ユーザーは複数ロール可能**
 ```typescript
-userRoles: Map<string, Set<RoleName>>
+userRoles: Map<string, Set<RoleName>>  // userName -> roleNames
 ```
 
 #### 3.2.2 リソース単位の管理
@@ -128,7 +128,7 @@ userRoles: Map<string, Set<RoleName>>
 #### 3.3.1 シンプルなboolean
 
 ```typescript
-authorize(userId: string, action: PermissionAction): boolean
+authorize(userName: string, action: PermissionAction): boolean
 ```
 
 #### 3.3.2 詳細な結果オブジェクト
@@ -222,7 +222,23 @@ Unix → ACL → RBAC → ABAC → ReBAC
 
 RBACは「組織の役割に基づく権限管理」という明確な目的を持ち、その文脈ではDenyは不要です。この設計により、RBACは**シンプルで理解しやすく、組織構造と自然に対応する**権限管理を実現しています。
 
-#### 3.4.5 実際のRBACライブラリにおけるDenyサポート状況
+#### 3.4.5 userIdとuserNameの選択
+
+インメモリ実装における識別子の選択について：
+
+**userIdを使う場合の問題点：**
+- インメモリ実装ではID採番システムがない
+- 永続化層がないため、IDの一意性管理が不要
+- 学習用には「ID: 1」のような例は直感的でない
+
+**userNameを使う理由：**
+- 名前が一意の識別子として機能
+- 既存実装との一貫性（Unix: `userName`、ACL: `user`）
+- 学習目的に適している（"alice", "bob"などの例が分かりやすい）
+
+したがって、本実装では`userName`を採用します。
+
+#### 3.4.6 実際のRBACライブラリにおけるDenyサポート状況
 
 主要なRBACライブラリを調査した結果、**純粋なRBAC実装**と**ハイブリッド型実装**で異なるアプローチを採用していることが判明しました：
 
@@ -305,8 +321,8 @@ end
 ```typescript
 class RoleBasedAccessControl {
   authorize(request: AuthzRequest): AuthzDecision
-  assignRole(userId: string, roleName: string): void
-  revokeRole(userId: string, roleName: string): void
+  assignRole(userName: string, roleName: string): void
+  revokeRole(userName: string, roleName: string): void
 }
 ```
 
@@ -315,7 +331,7 @@ class RoleBasedAccessControl {
 上記に加えて：
 ```typescript
   defineRole(role: Role): void
-  getRoles(userId: string): string[]
+  getRoles(userName: string): string[]
   getPermissions(roleName: string): PermissionBits
 ```
 
@@ -323,7 +339,7 @@ class RoleBasedAccessControl {
 
 さらに追加：
 ```typescript
-  hasRole(userId: string, roleName: string): boolean
+  hasRole(userName: string, roleName: string): boolean
   getAllUsers(): string[]
   getAllRoles(): Role[]
   clearAssignments(): void
@@ -351,7 +367,7 @@ class RoleBasedAccessControl {
 
 ユーザーは複数のロールを持てる設計：
 ```typescript
-type UserRoleAssignment = Map<string, Set<string>>
+type UserRoleAssignment = Map<string, Set<string>>  // userName -> roleNames
 ```
 
 理由：
@@ -393,8 +409,8 @@ export type AuthzDecision =
 class RoleBasedAccessControl {
   constructor(resource: RbacResource)
   authorize(request: AuthzRequest): AuthzDecision
-  assignRole(userId: string, roleName: string): void
-  revokeRole(userId: string, roleName: string): void
+  assignRole(userName: string, roleName: string): void
+  revokeRole(userName: string, roleName: string): void
 }
 ```
 
@@ -428,7 +444,7 @@ export type Role = {
 export type RbacResource = {
   name: string
   roles: Role[] // 利用可能なロール
-  assignments: Map<string, Set<string>> // userId -> roleNames
+  assignments: Map<string, Set<string>> // userName -> roleNames
 }
 ```
 
@@ -437,7 +453,7 @@ export type RbacResource = {
 ```typescript
 // 認可リクエスト
 export type AuthzRequest = {
-  userId: string
+  userName: string
   action: PermissionAction
 }
 
@@ -627,7 +643,7 @@ rbac.assignRole('charlie', 'admin')
 
 // 権限チェック
 const decision = rbac.authorize({
-  userId: 'alice',
+  userName: 'alice',
   action: 'write'
 })
 
@@ -655,7 +671,7 @@ rbac.assignRole('david', 'editor')
 
 // 権限は統合される（editor権限でwrite可能）
 const decision = rbac.authorize({
-  userId: 'david',
+  userName: 'david',
   action: 'write'
 })
 // 結果: granted（editorロールによる）
@@ -669,7 +685,7 @@ rbac.revokeRole('alice', 'editor')
 
 // 権限チェック（もはやwrite権限なし）
 const decision = rbac.authorize({
-  userId: 'alice',
+  userName: 'alice',
   action: 'write'
 })
 // 結果: denied（no-role）
