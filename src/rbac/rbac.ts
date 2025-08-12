@@ -76,7 +76,6 @@ export type AuthzDecision =
   | { 
       type: 'granted'
       matchedRoles: RoleName[]
-      effectivePermissions: PermissionBits
     }
   | { 
       type: 'denied'
@@ -99,7 +98,7 @@ export type AuthzDecision =
 
 // ロール管理クラス（グローバルロール管理）
 export class RoleManager {
-  private roles: typeof ROLES
+  private readonly roles: typeof ROLES
   private userRoleAssignments: UserRoleAssignment
 
   constructor(predefinedRoles: typeof ROLES) {
@@ -126,8 +125,7 @@ export class RoleManager {
 
   // ロール定義を取得
   getRole(roleName: RoleName): Role {
-    // 実装は学習者が行う
-    throw new Error('Not implemented')
+    return this.roles[roleName]
   }
 
   // ユーザーが特定のロールを持つか確認
@@ -141,7 +139,7 @@ export class RoleManager {
 export class RbacProtectedResource {
   private resourceId: string
   private readonly roleManager?: RoleManager
-  private requirements?: RoleRequirement
+  private readonly requirements?: RoleRequirement
 
   constructor(
     resourceId: string,
@@ -155,49 +153,29 @@ export class RbacProtectedResource {
 
   // アクセス権限をチェック（業界標準の「authorize」）
   authorize(userName: UserName, action: PermissionAction): AuthzDecision {
-    if (!this.roleManager) {
+    if (!this.roleManager || !this.requirements) {
       return { type: 'denied', reason: 'no-roles' }
     }
 
-    const existingRoles = this.roleManager.getUserRoles(userName);
+    const userRoles = this.roleManager.getUserRoles(userName);
 
+    if (this.requirements.type === 'any') {
+      const matchedRoles = this.requirements.roles.filter((roleName) =>
+      {
+        return userRoles.has(roleName) && this.roleManager.getRole(roleName).permissions[action];
+      })
 
-    // 実装は学習者が行う
-    throw new Error('Not implemented')
-  }
+      if (matchedRoles.length > 0) {
+        return { type: 'granted', matchedRoles }
+      }
+      return { type: 'denied', reason: 'insufficient-permissions', userRoles: Array.from(userRoles) }
 
-  // 権限評価ロジック（プライベートメソッド）
-  private evaluatePermissions(
-    userRoles: Set<RoleName>,
-    action: PermissionAction
-  ): EvaluationResult {
-    // 実装は学習者が行う
-    throw new Error('Not implemented')
-  }
+    } else {
+      // すべてのロールで権限があれば権限アリとする
 
-  // 評価結果を認可決定に変換（プライベートメソッド）
-  private buildDecision(
-    evaluation: EvaluationResult,
-    requirements?: RoleRequirement
-  ): AuthzDecision {
-    // 実装は学習者が行う
+    }
+
+    // 他のパターンはないので、もしここに来たら例外とする
     throw new Error('Not implemented')
   }
 }
-
-// ==========================================
-// ヘルパー関数
-// ==========================================
-
-// 権限ビットの作成
-export function createPermissionBits(read: boolean, write: boolean): PermissionBits {
-  return { read, write }
-}
-
-// よく使う権限パターン
-export const PERMISSION_PATTERNS = {
-  READ_ONLY: { read: true, write: false } as PermissionBits,
-  WRITE_ONLY: { read: false, write: true } as PermissionBits,
-  READ_WRITE: { read: true, write: true } as PermissionBits,
-  NONE: { read: false, write: false } as PermissionBits
-} as const

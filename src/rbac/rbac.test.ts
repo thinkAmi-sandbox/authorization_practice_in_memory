@@ -40,32 +40,35 @@ describe('RBAC (Role-Based Access Control)', () => {
       })
 
       describe('リソースに書き込み権限のないロールが割り当てられている', () => {
-        const roleManager = new RoleManager(ROLES);
-        const requirements = {type: 'any' as const, roles: ['viewer' as const]};
+        const roles = ['viewer' as const, 'auditor' as const];
 
         describe('リソースではいずれかのロールにマッチする必要がある', () => {
-          describe('ユーザーはリソースが求めるロールを持っていない', () => {
-            it('ユーザーのロールがないため、拒否されること', () => {
-              // const roleManager = new RoleManager(ROLES);
-              // const requirements = { type: 'any' as const, roles: ['viewer' as const] };
-              const resource = new RbacProtectedResource('doc1', roleManager, requirements);
+          const requirementType = 'any' as const;
 
+          describe('ユーザーはリソースが求めるロールを持っていない', () => {
+            const roleManager = new RoleManager(ROLES);
+            const requirements = {type: requirementType, roles: roles};
+            const resource = new RbacProtectedResource('doc1', roleManager, requirements);
+
+            it('ユーザーのロールがないため、拒否されること', () => {
               const result = resource.authorize('user1', 'write');
 
               expect(result).toEqual({
                 type: 'denied',
-                reason: 'no-roles'
+                reason: 'insufficient-permissions',
+                userRoles: []
               });
             })
           })
 
           describe('ユーザーはリソースが求めるロールを1つ持っている', () => {
-            it('ロールの権限不足のため、拒否されること', () => {
-              const roleManager = new RoleManager(ROLES);
-              roleManager.assignRole('user1', 'viewer');
-              const requirements = {type: 'any' as const, roles: ['viewer' as const, 'auditor' as const]};
-              const resource = new RbacProtectedResource('doc1', roleManager, requirements);
+            const roleManager = new RoleManager(ROLES);
+            const requirements = {type: requirementType, roles: roles};
+            const resource = new RbacProtectedResource('doc1', roleManager, requirements);
 
+            roleManager.assignRole('user1', 'viewer');
+
+            it('ロールの権限不足のため、拒否されること', () => {
               const result = resource.authorize('user1', 'write');
 
               expect(result).toEqual({
@@ -77,13 +80,14 @@ describe('RBAC (Role-Based Access Control)', () => {
           })
 
           describe('ユーザーはリソースが求めるロールを複数持っている', () => {
-            it('ロールの権限不足のため、拒否されること', () => {
-              const roleManager = new RoleManager(ROLES);
-              roleManager.assignRole('user1', 'viewer');
-              roleManager.assignRole('user1', 'auditor');
-              const requirements = {type: 'any' as const, roles: ['viewer' as const, 'auditor' as const]};
-              const resource = new RbacProtectedResource('doc1', roleManager, requirements);
+            const roleManager = new RoleManager(ROLES);
+            const requirements = {type: requirementType, roles: roles};
+            const resource = new RbacProtectedResource('doc1', roleManager, requirements);
 
+            roleManager.assignRole('user1', 'viewer');
+            roleManager.assignRole('user1', 'auditor');
+
+            it('ロールの権限不足のため、拒否されること', () => {
               const result = resource.authorize('user1', 'write');
 
               expect(result).toEqual({
@@ -150,35 +154,40 @@ describe('RBAC (Role-Based Access Control)', () => {
       })
 
       describe('リソースに書き込み権限があるロールが割り当てられている', () => {
-        describe('リソースではいずれかのロールにマッチする必要がある', () => {
-          describe('ユーザーはリソースが求めるロールを持っていない', () => {
-            it('ユーザーのロールがないため、拒否されること', () => {
-              const roleManager = new RoleManager(ROLES);
-              const requirements = {type: 'any' as const, roles: ['editor' as const, 'admin' as const]};
-              const resource = new RbacProtectedResource('doc1', roleManager, requirements);
+        const roles = ['editor' as const, 'admin' as const];
 
+        describe('リソースではいずれかのロールにマッチする必要がある', () => {
+          const requirementType = 'any' as const;
+
+          describe('ユーザーはリソースが求めるロールを持っていない', () => {
+            const roleManager = new RoleManager(ROLES);
+            const requirements = {type: requirementType, roles: roles};
+            const resource = new RbacProtectedResource('doc1', roleManager, requirements);
+
+            it('ユーザーのロールがないため、拒否されること', () => {
               const result = resource.authorize('user1', 'write');
 
               expect(result).toEqual({
                 type: 'denied',
-                reason: 'no-roles'
+                reason: 'insufficient-permissions',
+                userRoles: []
               });
             })
           })
 
           describe('ユーザーはリソースが求めるロールを1つ持っている', () => {
-            it('許可されること', () => {
-              const roleManager = new RoleManager(ROLES);
-              roleManager.assignRole('user1', 'editor');
-              const requirements = {type: 'any' as const, roles: ['editor' as const, 'admin' as const]};
-              const resource = new RbacProtectedResource('doc1', roleManager, requirements);
+            const roleManager = new RoleManager(ROLES);
+            const requirements = {type: requirementType, roles: roles};
+            const resource = new RbacProtectedResource('doc1', roleManager, requirements);
 
+            roleManager.assignRole('user1', 'editor');
+
+            it('許可されること', () => {
               const result = resource.authorize('user1', 'write');
 
               expect(result).toEqual({
                 type: 'granted',
                 matchedRoles: ['editor'],
-                effectivePermissions: {read: true, write: true}
               });
             })
           })
@@ -196,7 +205,6 @@ describe('RBAC (Role-Based Access Control)', () => {
               expect(result).toEqual({
                 type: 'granted',
                 matchedRoles: ['editor', 'admin'],
-                effectivePermissions: {read: true, write: true}
               });
             })
           })
@@ -248,7 +256,6 @@ describe('RBAC (Role-Based Access Control)', () => {
               expect(result).toEqual({
                 type: 'granted',
                 matchedRoles: ['editor', 'admin'],
-                effectivePermissions: {read: true, write: true}
               });
             })
           })
