@@ -49,7 +49,6 @@ export type Role = typeof ROLES[RoleName]
 export type RoleRequirement = 
   | { type: 'any'; roles: RoleName[] }      // いずれかのロールがあればOK
   | { type: 'all'; roles: RoleName[] }      // 全てのロールが必要
-  | { type: 'custom'; evaluate: (roles: Set<RoleName>) => boolean }
 
 // ユーザーとロールの割り当て管理
 export type UserRoleAssignment = Map<UserName, Set<RoleName>>
@@ -85,7 +84,7 @@ export type AuthzDecision =
     }
   | {
       type: 'denied'
-      reason: 'requirement-not-met'  // リソース固有の要件を満たさない
+      reason: 'requirement-not-met'  // リソースの要件を満たさない
       details: string
     }
 
