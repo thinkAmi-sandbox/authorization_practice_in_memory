@@ -77,8 +77,8 @@ const policy: PolicyRule = {
   condition: (ctx) => {
     // 複数の属性を動的に評価
     return ctx.subject.department === ctx.resource.department && 
-           ctx.subject.level >= 3 &&
-           ctx.environment.time.getHours() >= 9
+           ctx.subject.clearanceLevel >= 3 &&
+           ctx.environment.currentTime.getHours() >= 9
   }
 }
 ```
@@ -106,7 +106,7 @@ const hybridPolicy: PolicyRule = {
   condition: (ctx) => {
     // ロールも属性の一つとして評価
     const hasEditorRole = ctx.subject.role === 'editor'
-    const inBusinessHours = ctx.environment.time.getHours() >= 9
+    const inBusinessHours = ctx.environment.currentTime.getHours() >= 9
     const sameDepartment = ctx.subject.department === ctx.resource.department
     
     // ロール＋他の属性を組み合わせて評価
@@ -123,8 +123,13 @@ ABACの学習において重要な概念：
 
 1. **属性（Attributes）**: エンティティの特性
    
-   **重要**: 以下の属性カテゴリーは**学習用の典型例**であり、ABACで必須の属性ではありません。
+   **重要**: 以下の4つの属性カテゴリー（Subject、Resource、Environment、Action）は**学習用の典型例**であり、ABACで必須の属性カテゴリーではありません。
    ABACの本質は「属性ベース」であることで、どんな属性を使うかは実装や要件次第です。
+   
+   **ただし、事実上の業界標準となっている分類：**
+   - **XACML（OASIS標準）**: この4カテゴリーを採用
+   - **OPA（Open Policy Agent）**: 同様の分類を採用
+   - **主要なABACライブラリ**: 多くがこの分類に従う
    
    - **Subject属性（例）**: ユーザーの部門、職位、クリアランスレベル、役割（ロール）
    - **Resource属性（例）**: ドキュメントの機密度、所有部門、作成日時
@@ -186,11 +191,27 @@ ABACのポリシー評価は、以下のフローで実行されます：
 
 #### 2.6.2 学習用実装での簡略化
 
-本学習用実装では、以下の簡略化を行います：
+**インメモリCLI環境での学習用という条件に基づく簡略化：**
 
-1. **PIPの簡略化**: データベースアクセスの代わりにインメモリで属性を管理
+本学習用実装では、以下の前提条件により自然な簡略化を行います：
+
+- **インメモリ環境**: データベースや外部システムとの連携が不要
+- **CLI的な使用方法**: Webアプリケーションでの複数ユーザー同時アクセスを想定しない
+- **学習効果重視**: 各コンポーネントの概念理解を優先し、実装の複雑さは最小限に
+
+**具体的な簡略化内容：**
+
+1. **PIPの簡略化**: 外部データソースからの属性取得の代わりに、インメモリでの属性管理
+   - **実システム**: LDAP、DB、API呼び出しによる属性取得
+   - **学習用**: プリミティブなオブジェクトでの属性管理
+
 2. **PAPの簡略化**: ポリシーストレージとして単純なMapを使用
-3. **統合的な実装**: 学習効果を重視し、各コンポーネントの役割を明確に分離しつつも、単一クラスで実装可能な設計
+   - **実システム**: データベースやファイルシステムでのポリシー永続化
+   - **学習用**: インメモリMap構造での一時的な管理
+
+3. **PEPの統合**: RESTful APIとの統合の代わりに、直接メソッド呼び出し
+   - **実システム**: HTTPリクエスト受付、レスポンス生成
+   - **学習用**: 関数呼び出しによる直接的なアクセス制御
 
 #### 2.6.3 各コンポーネントの責務と学習ポイント
 
@@ -543,7 +564,6 @@ ABACのEffect（効果）を表す用語として、`permit/deny`または`allow
 const securityDenyPolicy: PolicyRule = {
   id: 'deny-insufficient-clearance',
   effect: 'deny',
-  priority: 1,  // 最高優先度
   condition: (ctx) => {
     // クリアランスレベル不足は明示的に拒否
     return ctx.subject.clearanceLevel < ctx.resource.classificationLevel
@@ -553,15 +573,15 @@ const securityDenyPolicy: PolicyRule = {
 
 **2. コンプライアンス要件の実装**
 ```typescript
-// 例：GDPR準拠のデータアクセス制御
-const gdprCompliancePolicy: PolicyRule = {
-  id: 'gdpr-cross-border-restriction',
+// 例：機密ドキュメントへの外部アクセス制御
+const confidentialAccessPolicy: PolicyRule = {
+  id: 'confidential-access-restriction',
   effect: 'deny',
   condition: (ctx) => {
-    const isEUData = ctx.resource.dataSubjectLocation === 'EU'
-    const isUSAccess = ctx.environment.accessLocation === 'US'
-    const hasAgreement = ctx.subject.dataTransferAgreement === true
-    return isEUData && isUSAccess && !hasAgreement
+    const isExternal = ctx.environment.location === 'external'
+    const isHighClassification = ctx.resource.classificationLevel >= 4
+    const isNotAdmin = ctx.subject.role !== 'admin'
+    return isExternal && isHighClassification && isNotAdmin
   }
 }
 ```
@@ -574,7 +594,7 @@ const networkRestrictionPolicy: PolicyRule = {
   effect: 'deny',
   condition: (ctx) => {
     const isExternal = !ctx.environment.ipAddress.startsWith('10.')
-    const isConfidential = ctx.resource.classification === 'confidential'
+    const isConfidential = ctx.resource.classificationLevel >= 4
     return isExternal && isConfidential
   }
 }
@@ -677,15 +697,8 @@ Denyを実装することで、PermitとDenyのルールが競合する可能性
 - XACMLではオプションとして提供
 
 **オプション4: Priority-Based（優先度ベース）**
-```typescript
-type PolicyRule = {
-  priority?: number  // 低い値が高優先度
-  // ...
-}
-```
-- 柔軟な制御が可能
-- 実装が複雑になる
-- 実際のライブラリでは稀
+- 柔軟な制御が可能だが実装が複雑
+- 学習用実装ではシンプルなDeny-Overrideのみを採用
 
 ### 3.8 ポリシーの組み合わせ設計
 
@@ -746,7 +759,6 @@ type PolicyRule = {
   description?: string
   effect: 'permit' | 'deny'
   condition: (context: EvaluationContext) => boolean
-  // priorityフィールドは削除（Deny-Overrideでは不要）
 }
 ```
 
@@ -831,7 +843,6 @@ type PolicyRule = {
   description?: string
   effect: 'permit' | 'deny'  // 明示的なpermit/deny
   condition: (context: EvaluationContext) => boolean
-  priority?: number
 }
 ```
 
@@ -845,15 +856,12 @@ type PolicyRule = {
 
 ```typescript
 class PolicyEvaluationEngine {
-  private resolutionStrategy: 'deny-override' | 'permit-override' | 'first-match'
-  
-  constructor(strategy: ResolutionStrategy = 'deny-override') {
-    // デフォルトはdeny-override（業界標準）
-    this.resolutionStrategy = strategy
+  constructor() {
+    // Deny-Override戦略を採用（業界標準）
   }
   
   evaluate(context: EvaluationContext): PolicyDecision {
-    // Deny-Overrideの場合：
+    // Deny-Override戦略：
     // 1. すべてのポリシーを評価
     // 2. 一つでもDenyがあれば即座にDeny
     // 3. Denyがなく、Permitがあれば許可
@@ -872,7 +880,7 @@ class PolicyEvaluationEngine {
 
 ```typescript
 class PolicyEvaluationEngine {
-  constructor(strategy?: ResolutionStrategy)
+  constructor()  // Deny-Override戦略で固定
   
   // ポリシー評価（業界標準の"evaluate"）
   evaluate(context: EvaluationContext): PolicyDecision
@@ -1003,7 +1011,7 @@ const clearancePolicy: PolicyRule = {
 ### 6.2 評価エンジンの使用例
 
 ```typescript
-// エンジンの初期化（デフォルトはdeny-override）
+// エンジンの初期化（Deny-Override戦略）
 const engine = new PolicyEvaluationEngine()
 
 // ポリシーの登録
@@ -1055,18 +1063,18 @@ switch (decision.type) {
 ### 6.3 複合条件の例
 
 ```typescript
-// 管理者の緊急アクセス（複数条件の組み合わせ）
-const emergencyAccessPolicy: PolicyRule = {
-  id: 'emergency-admin',
-  description: '管理者による緊急アクセス',
+// 管理者のオフィスアクセス（複数条件の組み合わせ）
+const adminOfficeAccessPolicy: PolicyRule = {
+  id: 'admin-office-access',
+  description: '管理者によるオフィスからのアクセス',
   effect: 'permit',
   condition: (ctx) => {
     const isAdmin = ctx.subject.role === 'admin'
-    const isEmergency = ctx.environment.emergencyMode === true
+    const isFromOffice = ctx.environment.location === 'office'
     const isFromTrustedNetwork = (ctx.environment.ipAddress as string)
       .startsWith('10.0.')
     
-    return isAdmin && isEmergency && isFromTrustedNetwork
+    return isAdmin && isFromOffice && isFromTrustedNetwork
   }
 }
 
@@ -1092,7 +1100,7 @@ describe('PolicyEvaluationEngine', () => {
   let engine: PolicyEvaluationEngine
   
   beforeEach(() => {
-    engine = new PolicyEvaluationEngine('deny-override')
+    engine = new PolicyEvaluationEngine()
   })
   
   it('営業時間内のアクセスを許可', () => {
