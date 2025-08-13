@@ -122,10 +122,17 @@ const hybridPolicy: PolicyRule = {
 ABACの学習において重要な概念：
 
 1. **属性（Attributes）**: エンティティの特性
-   - **Subject属性**: ユーザーの部門、職位、クリアランスレベル、役割（ロール）
-   - **Resource属性**: ドキュメントの機密度、所有部門、作成日時
-   - **Environment属性**: アクセス時刻、IPアドレス、デバイス種別
-   - **Action属性**: 操作の種類、緊急度
+   
+   **重要**: 以下の属性カテゴリーは**学習用の典型例**であり、ABACで必須の属性ではありません。
+   ABACの本質は「属性ベース」であることで、どんな属性を使うかは実装や要件次第です。
+   
+   - **Subject属性（例）**: ユーザーの部門、職位、クリアランスレベル、役割（ロール）
+   - **Resource属性（例）**: ドキュメントの機密度、所有部門、作成日時
+   - **Environment属性（例）**: アクセス時刻、IPアドレス、デバイス種別
+   - **Action属性（例）**: 操作の種類、緊急度
+   
+   実際のABAC実装では、業務要件に応じて必要な属性を自由に定義できます。
+   この柔軟性こそが、RBACの固定的なロールと対照的なABACの強みです。
 
 2. **ポリシー（Policy）**: 属性を評価するルール
    - **条件（Condition）**: 属性間の関係を定義する評価関数
@@ -138,7 +145,56 @@ ABACの学習において重要な概念：
    - **PIP（Policy Information Point）**: 属性情報を提供
    - **PAP（Policy Administration Point）**: ポリシーを管理
 
-### 2.6 実際のABACライブラリの実装パターン
+### 2.6 属性のカテゴリー構造と文脈の明確化
+
+#### 2.6.1 なぜ属性をカテゴリー別に整理するのか
+
+ABACでは、属性を**カテゴリー別に整理することで文脈を明確化**します：
+
+**フラットな構造の問題点:**
+```typescript
+// 文脈が不明瞭
+{
+  department: 'engineering',      // これは誰の部門？
+  documentDepartment: 'finance',  // 命名規則が複雑に
+  userLevel: 3,
+  resourceLevel: 5
+}
+```
+
+**カテゴリー別構造の利点:**
+```typescript
+{
+  subject: {
+    department: 'engineering',    // ユーザーが所属する部門
+    clearanceLevel: 3
+  },
+  resource: {
+    department: 'finance',        // ドキュメントを管理する部門
+    classificationLevel: 5
+  }
+}
+```
+
+#### 2.6.2 文脈の明確化によるメリット
+
+1. **名前空間の整理**: 同じ属性名でも文脈が明確
+   - `subject.department` vs `resource.department`
+
+2. **ポリシーの可読性向上**:
+```typescript
+condition: (ctx) => {
+  // 意図が明確：「アクセスする人の」部門と「ドキュメントの」部門を比較
+  return ctx.subject.department === ctx.resource.department
+      && ctx.subject.clearanceLevel >= ctx.resource.classificationLevel
+}
+```
+
+3. **拡張性**: 新しい属性を適切なカテゴリーに追加しやすい
+
+4. **業界標準との整合性**: XACML、OPA等もこの構造を採用
+
+### 2.7 実際のABACライブラリの実装パターン
 
 主要なABACライブラリを調査した結果、以下のアプローチに分類されることが判明しました：
 
@@ -267,7 +323,7 @@ end
 - Default Denyパターン
 - シンプルだが表現力に限界
 
-### 2.7 権限管理モデルの進化における位置づけ
+### 2.8 権限管理モデルの進化における位置づけ
 
 ```
 Unix → ACL → RBAC → ABAC → ReBAC
@@ -320,24 +376,45 @@ condition: (ctx: EvaluationContext) => boolean
 
 #### 3.2.1 型安全性 vs 柔軟性
 
-**オプション1: 厳密な型定義**
-```typescript
-interface SubjectAttributes {
-  department: string
-  level: number
-  clearance: 'public' | 'internal' | 'confidential' | 'secret'
-}
-```
-- 利点：型安全、補完が効く
-- 欠点：拡張性が低い
-
-**オプション2: 柔軟な型定義（採用）**
+**オプション1: 柔軟な型定義**
 ```typescript
 type AttributeValue = string | number | boolean | Date
 type Attributes = Record<string, AttributeValue>
 ```
 - 利点：拡張性が高い、実システムに近い
-- 欠点：実行時の型チェックが必要
+- 欠点：実行時の型チェックが必要、学習時に何の属性を使うべきか不明確
+
+**オプション2: 厳密な型定義（学習用として採用）**
+```typescript
+interface SubjectAttributes {
+  userId: string
+  department: 'engineering' | 'finance' | 'hr' | 'sales'
+  role: 'admin' | 'manager' | 'developer' | 'viewer'
+  clearanceLevel: 1 | 2 | 3 | 4 | 5  // 1=最低、5=最高
+}
+
+interface ResourceAttributes {
+  documentId: string
+  department: 'engineering' | 'finance' | 'hr' | 'sales'
+  classificationLevel: 1 | 2 | 3 | 4 | 5
+  owner: string
+  createdAt: Date
+}
+
+interface EnvironmentAttributes {
+  currentTime: Date
+  ipAddress: string
+  deviceType: 'desktop' | 'mobile' | 'tablet'
+  location: 'office' | 'home' | 'external'
+}
+```
+- 利点：型安全、IDEの補完が効く、学習時に概念を明確に理解できる
+- 欠点：拡張性が低い（学習用では問題なし）
+
+**学習効果の観点から厳密な型定義を採用する理由:**
+- ABACの概念理解が深まる（どんな属性があるか明確）
+- 実装ミスを防げる（タイポが即座にエラーに）
+- デバッグが容易（型安全なポリシー記述）
 
 ### 3.3 評価結果の設計
 
@@ -458,9 +535,30 @@ type PolicyRule = {
 - 学習用として様々な戦略を実装可能
 - Denyルールに高優先度を設定することでセキュリティを確保
 
-### 3.6 APIの設計
+### 3.6 ポリシーの組み合わせ設計
 
-#### 3.6.1 最小限 vs 完全
+#### 3.6.1 単一ポリシー vs 複数ポリシー
+
+**複数ポリシーの組み合わせを前提とした設計（採用）**
+
+ABACでは、複数のポリシーを組み合わせることが一般的です：
+
+1. **関心の分離**: 各ポリシーが特定の観点を担当
+   - 営業時間チェックポリシー
+   - 部門アクセス制御ポリシー
+   - 機密レベルチェックポリシー
+
+2. **柔軟な組み合わせ**: 状況に応じてポリシーを追加・削除可能
+
+3. **実世界の要件への対応**: 複数の制約条件が同時に存在
+   - 「営業時間内」AND「同一部門」AND「適切なクリアランスレベル」
+
+これは、RBACの「ロールを持っているか」という単純なチェックとは対照的で、
+ABACの動的評価の強みを示しています。
+
+### 3.7 APIの設計
+
+#### 3.7.1 最小限 vs 完全
 
 **オプション1: 最小限のAPI（採用）**
 ```typescript
@@ -506,24 +604,45 @@ type PolicyRule = {
 - **理解しやすい**：通常のコードとして読める
 - **テストしやすい**：単体テストが書きやすい
 
-#### 4.1.2 柔軟な属性システム
+#### 4.1.2 厳密な属性システム（学習用最適化）
 
 ```typescript
-type AttributeValue = string | number | boolean | Date
-type Attributes = Record<string, AttributeValue>
+// 学習効果を最大化するため、事前定義された属性型を採用
+interface SubjectAttributes {
+  userId: string
+  department: 'engineering' | 'finance' | 'hr' | 'sales'
+  role: 'admin' | 'manager' | 'developer' | 'viewer'
+  clearanceLevel: 1 | 2 | 3 | 4 | 5
+}
+
+interface ResourceAttributes {
+  documentId: string
+  department: 'engineering' | 'finance' | 'hr' | 'sales'
+  classificationLevel: 1 | 2 | 3 | 4 | 5
+  owner: string
+  createdAt: Date
+}
+
+interface EnvironmentAttributes {
+  currentTime: Date
+  ipAddress: string
+  deviceType: 'desktop' | 'mobile' | 'tablet'
+  location: 'office' | 'home' | 'external'
+}
 
 type EvaluationContext = {
-  subject: Attributes    // ユーザー属性
-  resource: Attributes   // リソース属性
+  subject: SubjectAttributes
+  resource: ResourceAttributes
   action: PermissionAction  // 'read' | 'write'
-  environment: Attributes // 環境属性
+  environment: EnvironmentAttributes
 }
 ```
 
 理由：
-- 様々な属性タイプに対応
-- 実システムの柔軟性を体験
-- 動的な属性追加が可能
+- **概念の明確化**: 各属性の役割と型が明確
+- **IDEサポート**: 完全な型補完とエラー検出
+- **学習の容易さ**: 何を実装すべきかが明示的
+- **デバッグ効率**: コンパイル時にエラーを検出
 
 #### 4.1.3 詳細な評価結果（Tagged Union）
 
@@ -674,7 +793,7 @@ class PolicyEvaluationEngine {
 #### 5.3.1 採用した設計の利点
 
 - **関数ベース条件**：デバッグ容易、型安全
-- **柔軟な属性**：実システムの多様性を体験
+- **厳密な属性型**：学習効果の最大化、IDE支援の活用
 - **優先度ベース**：様々な戦略を学習可能
 
 #### 5.3.2 制限事項
@@ -735,25 +854,27 @@ engine.addPolicy(businessHoursPolicy)
 engine.addPolicy(departmentPolicy)
 engine.addPolicy(clearancePolicy)
 
-// 評価コンテキストの作成
+// 評価コンテキストの作成（型安全）
 const context: EvaluationContext = {
   subject: {
     userId: 'alice',
-    department: 'engineering',
-    clearanceLevel: 2,
-    role: 'developer'
+    department: 'engineering',  // 型定義により選択肢が限定
+    clearanceLevel: 2,          // 1-5の範囲
+    role: 'developer'           // 事前定義されたロールのみ
   },
   resource: {
     documentId: 'doc-123',
     department: 'engineering',
     classificationLevel: 3,
-    owner: 'bob'
+    owner: 'bob',
+    createdAt: new Date('2024-01-01')
   },
   action: 'read',
   environment: {
     currentTime: new Date('2024-01-15T10:00:00'),
     ipAddress: '192.168.1.100',
-    deviceType: 'desktop'
+    deviceType: 'desktop',      // 型定義により選択肢が限定
+    location: 'office'          // office/home/externalのみ
   }
 }
 
