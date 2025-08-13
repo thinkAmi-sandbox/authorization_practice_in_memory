@@ -663,17 +663,20 @@ Denyを実装することで、PermitとDenyのルールが競合する可能性
 **オプション1: First-Match（最初にマッチしたルール）**
 - 単純で高速
 - ルールの順序が重要
+- CASLなど一部のライブラリで採用
 
-**オプション2: Deny-Override（Deny優先）（推奨）**
-- セキュリティ原則に合致
-- 最も一般的な戦略
-- 明示的な拒否は常に優先される
+**オプション2: Deny-Override（Deny優先）（採用）**
+- **業界標準**：XACML、Casbin、OPA、py-abacなど主要実装で採用
+- **セキュリティ原則**："Fail Secure"の原則に合致
+- **明示的な拒否は常に優先**：一つでもDenyがあれば必ず拒否
+- **学習効果**：実際のライブラリに移行しやすい
 
 **オプション3: Permit-Override（Permit優先）**
 - 利便性重視
 - 特殊なケースで使用
+- XACMLではオプションとして提供
 
-**オプション4: Priority-Based（優先度ベース）（採用）**
+**オプション4: Priority-Based（優先度ベース）**
 ```typescript
 type PolicyRule = {
   priority?: number  // 低い値が高優先度
@@ -681,8 +684,8 @@ type PolicyRule = {
 }
 ```
 - 柔軟な制御が可能
-- 学習用として様々な戦略を実装可能
-- Denyルールに高優先度を設定することでセキュリティを確保
+- 実装が複雑になる
+- 実際のライブラリでは稀
 
 ### 3.8 ポリシーの組み合わせ設計
 
@@ -743,7 +746,7 @@ type PolicyRule = {
   description?: string
   effect: 'permit' | 'deny'
   condition: (context: EvaluationContext) => boolean
-  priority?: number  // 低い値が高優先度
+  // priorityフィールドは削除（Deny-Overrideでは不要）
 }
 ```
 
@@ -838,24 +841,32 @@ type PolicyRule = {
 - **環境制御**: ネットワーク、時間帯による制限
 - **RBACとの差別化**: 動的評価には明示的な拒否が必須
 
-#### 4.1.5 優先度ベースの競合解決
+#### 4.1.5 Deny-Override競合解決戦略
 
 ```typescript
 class PolicyEvaluationEngine {
-  private resolutionStrategy: 'first-match' | 'deny-override' | 'permit-override' | 'priority'
+  private resolutionStrategy: 'deny-override' | 'permit-override' | 'first-match'
+  
+  constructor(strategy: ResolutionStrategy = 'deny-override') {
+    // デフォルトはdeny-override（業界標準）
+    this.resolutionStrategy = strategy
+  }
   
   evaluate(context: EvaluationContext): PolicyDecision {
-    // strategyに基づいて評価
-    // デフォルトはdeny-override（セキュリティ優先）
+    // Deny-Overrideの場合：
+    // 1. すべてのポリシーを評価
+    // 2. 一つでもDenyがあれば即座にDeny
+    // 3. Denyがなく、Permitがあれば許可
+    // 4. どちらもなければnot-applicable
   }
 }
 ```
 
 理由：
-- 様々な戦略を学習可能
-- 実システムの多様性を理解
-- 切り替え可能な実装
-- Deny優先をデフォルトとしてセキュリティを確保
+- **業界標準に準拠**：主要なABACライブラリの標準動作
+- **セキュリティファースト**："Fail Secure"の原則を実装
+- **学習効果**：実際のライブラリへの移行が容易
+- **オプション提供**：他の戦略も選択可能な柔軟性を維持
 
 #### 4.1.6 最小限のAPI設計
 
@@ -943,7 +954,7 @@ class PolicyEvaluationEngine {
 
 - **関数ベース条件**：デバッグ容易、型安全
 - **厳密な属性型**：学習効果の最大化、IDE支援の活用
-- **優先度ベース**：様々な戦略を学習可能
+- **Deny-Override**：業界標準に準拠した安全な戦略
 
 #### 5.3.2 制限事項
 
@@ -961,7 +972,6 @@ const businessHoursPolicy: PolicyRule = {
   id: 'business-hours',
   description: '営業時間（9-18時）のみアクセス可能',
   effect: 'permit',
-  priority: 10,
   condition: (ctx) => {
     const hour = (ctx.environment.currentTime as Date).getHours()
     return hour >= 9 && hour <= 18
@@ -973,7 +983,6 @@ const departmentPolicy: PolicyRule = {
   id: 'same-department',
   description: '同一部門のドキュメントのみアクセス可能',
   effect: 'permit',
-  priority: 20,
   condition: (ctx) => 
     ctx.subject.department === ctx.resource.department
 }
@@ -983,7 +992,6 @@ const clearancePolicy: PolicyRule = {
   id: 'clearance-check',
   description: 'クリアランスレベル不足の場合は拒否',
   effect: 'deny',
-  priority: 1,  // 高優先度（セキュリティ優先）
   condition: (ctx) => {
     const subjectLevel = ctx.subject.clearanceLevel as number
     const resourceLevel = ctx.resource.classificationLevel as number
@@ -995,8 +1003,8 @@ const clearancePolicy: PolicyRule = {
 ### 6.2 評価エンジンの使用例
 
 ```typescript
-// エンジンの初期化
-const engine = new PolicyEvaluationEngine('priority')
+// エンジンの初期化（デフォルトはdeny-override）
+const engine = new PolicyEvaluationEngine()
 
 // ポリシーの登録
 engine.addPolicy(businessHoursPolicy)
@@ -1052,7 +1060,6 @@ const emergencyAccessPolicy: PolicyRule = {
   id: 'emergency-admin',
   description: '管理者による緊急アクセス',
   effect: 'permit',
-  priority: 0,  // 最高優先度
   condition: (ctx) => {
     const isAdmin = ctx.subject.role === 'admin'
     const isEmergency = ctx.environment.emergencyMode === true
@@ -1068,7 +1075,6 @@ const afterHoursRestriction: PolicyRule = {
   id: 'after-hours-restriction',
   description: '時間外は管理者のみアクセス可能',
   effect: 'deny',
-  priority: 5,
   condition: (ctx) => {
     const hour = (ctx.environment.currentTime as Date).getHours()
     const isAfterHours = hour < 9 || hour >= 18
@@ -1213,9 +1219,9 @@ interface AttributeResolver {
    - デバイス種別
 
 4. **競合解決**
-   - Deny優先
-   - Permit優先
-   - 優先度ベース
+   - Deny-Override（デフォルト）
+   - Permit-Override
+   - First-Match
 
 5. **エッジケース**
    - 属性欠落
