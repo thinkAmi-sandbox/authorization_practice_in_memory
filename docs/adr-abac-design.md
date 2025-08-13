@@ -29,19 +29,108 @@
 - read（閲覧）とwrite（作成・更新・削除）の2つの権限で十分
 - 属性例：部門、職位、勤務時間、機密レベル、IPアドレス
 
-### 2.4 ABACの核心概念の学習
+### 2.4 RBACとABACの中心概念の違い
+
+#### 2.4.1 権限管理の中心概念の対比
+
+**RBACの中心概念:**
+```
+ユーザー → 【ロール】 → 権限
+```
+- **ロール**が権限を抽象化する中心的な概念
+- ユーザーはロールを通じて間接的に権限を取得
+- 静的な権限割り当て
+
+**ABACの中心概念:**
+```
+【属性】 → 【ポリシー】 → 権限判定
+```
+- **属性**（Attributes）が基本要素
+- **ポリシー**（Policy）は属性を評価するルール
+- 動的な権限評価
+
+#### 2.4.2 概念の対応関係
+
+| 要素 | RBAC | ABAC |
+|------|------|------|
+| **権限の源泉** | ロール（役割） | 属性（特性） |
+| **評価方法** | ロールの有無をチェック | ポリシーで属性を評価 |
+| **中心概念** | ロール | 属性＋ポリシー |
+| **権限判定** | 静的（事前定義） | 動的（実行時評価） |
+
+#### 2.4.3 具体的な違いの例
+
+**RBAC：ロールが権限を決定**
+```typescript
+// ロール自体が権限のコンテナ
+if (user.hasRole('editor')) {
+  // editorロール = 編集権限
+  return 'granted'
+}
+```
+
+**ABAC：ポリシーが属性を評価して決定**
+```typescript
+// ポリシーは属性を評価する関数
+const policy: PolicyRule = {
+  effect: 'permit',
+  condition: (ctx) => {
+    // 複数の属性を動的に評価
+    return ctx.subject.department === ctx.resource.department && 
+           ctx.subject.level >= 3 &&
+           ctx.environment.time.getHours() >= 9
+  }
+}
+```
+
+#### 2.4.4 ポリシーの役割
+
+**重要な理解：ポリシーはロールの「代わり」ではなく「評価ルール」**
+
+1. **RBAC**: ロール自体が権限のコンテナ
+   - `role: 'editor' = { read: true, write: true }`
+   - ロールと権限は1対1の静的な関係
+
+2. **ABAC**: ポリシーは属性を評価する関数
+   - `policy = (attributes) => boolean`
+   - 属性の組み合わせを動的に評価
+
+#### 2.4.5 RBACとABACの包含関係
+
+興味深いことに、ABACはRBACを包含できます。ロールを属性の一つとして扱うことで、RBACの機能をABAC内で実現可能：
+
+```typescript
+// ABACでロールを属性として使用（ハイブリッドアプローチ）
+const hybridPolicy: PolicyRule = {
+  effect: 'permit',
+  condition: (ctx) => {
+    // ロールも属性の一つとして評価
+    const hasEditorRole = ctx.subject.role === 'editor'
+    const inBusinessHours = ctx.environment.time.getHours() >= 9
+    const sameDepartment = ctx.subject.department === ctx.resource.department
+    
+    // ロール＋他の属性を組み合わせて評価
+    return hasEditorRole && inBusinessHours && sameDepartment
+  }
+}
+```
+
+これは「ロール → ポリシー」という単純な置き換えではなく、「静的なロール割り当て → 動的な属性評価」というパラダイムシフトを表しています。
+
+### 2.5 ABACの核心概念の学習
 
 ABACの学習において重要な概念：
 
 1. **属性（Attributes）**: エンティティの特性
-   - **Subject属性**: ユーザーの部門、職位、クリアランスレベル
+   - **Subject属性**: ユーザーの部門、職位、クリアランスレベル、役割（ロール）
    - **Resource属性**: ドキュメントの機密度、所有部門、作成日時
    - **Environment属性**: アクセス時刻、IPアドレス、デバイス種別
    - **Action属性**: 操作の種類、緊急度
 
 2. **ポリシー（Policy）**: 属性を評価するルール
-   - **条件（Condition）**: 属性間の関係を定義
+   - **条件（Condition）**: 属性間の関係を定義する評価関数
    - **効果（Effect）**: permit（許可）またはdeny（拒否）
+   - **優先度（Priority）**: 競合解決のための重要度
 
 3. **ポリシー評価エンジン（Policy Evaluation Engine）**:
    - **PEP（Policy Enforcement Point）**: アクセス要求を受け付ける
@@ -49,11 +138,11 @@ ABACの学習において重要な概念：
    - **PIP（Policy Information Point）**: 属性情報を提供
    - **PAP（Policy Administration Point）**: ポリシーを管理
 
-### 2.5 実際のABACライブラリの実装パターン
+### 2.6 実際のABACライブラリの実装パターン
 
 主要なABACライブラリを調査した結果、以下のアプローチに分類されることが判明しました：
 
-#### 2.5.1 ポリシー記述言語による分類
+#### 2.6.1 ポリシー記述言語による分類
 
 **DSL（Domain Specific Language）型**
 
@@ -158,7 +247,7 @@ end
 - 利点：標準化、相互運用性
 - 欠点：極めて冗長、人間には読みにくい
 
-#### 2.5.2 評価エンジンの実装パターン
+#### 2.6.2 評価エンジンの実装パターン
 
 | パターン | 代表例 | 特徴 | 学習への影響 |
 |---------|--------|------|------------|
@@ -166,7 +255,7 @@ end
 | **コンパイル型** | 一部のXACML実装 | ポリシーを事前にコンパイル | 高速だが動的変更が困難 |
 | **ハイブリッド型** | CASL | 一部をコンパイル、一部を実行時評価 | バランスが良い |
 
-#### 2.5.3 Effect（Permit/Deny）のサポート状況
+#### 2.6.3 Effect（Permit/Deny）のサポート状況
 
 **明示的なDenyをサポート** ✅
 - Casbin、OPA、XACML、py-abac、Vakt
@@ -178,7 +267,7 @@ end
 - Default Denyパターン
 - シンプルだが表現力に限界
 
-### 2.6 権限管理モデルの進化における位置づけ
+### 2.7 権限管理モデルの進化における位置づけ
 
 ```
 Unix → ACL → RBAC → ABAC → ReBAC
@@ -269,17 +358,90 @@ type PolicyDecision =
 - デバッグ情報が豊富
 - なぜ許可/拒否されたかが明確
 
-### 3.4 競合解決戦略
+### 3.4 Deny（拒否）機能の必要性
 
-#### 3.4.1 複数ルールがマッチした場合の処理
+#### 3.4.1 RBACとABACにおけるDenyの根本的な違い
+
+**RBACにおけるDeny:**
+- **通常は不要**: ロールベースの加算的モデル（ロールがある=権限あり、ない=権限なし）
+- **組織構造との対応**: 職務に基づく静的な権限管理
+- **シンプルな管理**: 「必要なロールがない」という単純な理由でアクセス拒否
+
+**ABACにおけるDeny:**
+- **必須機能**: 動的な条件評価には明示的な拒否が不可欠
+- **文脈依存の制御**: 属性の組み合わせによる複雑な条件を表現
+- **セキュリティ要件**: コンプライアンスやセキュリティポリシーの厳格な実装
+
+#### 3.4.2 ABACでDenyが必要な理由
+
+**1. セキュリティ違反の防止**
+```typescript
+// 例：機密文書への不正アクセス防止
+const securityDenyPolicy: PolicyRule = {
+  id: 'deny-insufficient-clearance',
+  effect: 'deny',
+  priority: 1,  // 最高優先度
+  condition: (ctx) => {
+    // クリアランスレベル不足は明示的に拒否
+    return ctx.subject.clearanceLevel < ctx.resource.classificationLevel
+  }
+}
+```
+
+**2. コンプライアンス要件の実装**
+```typescript
+// 例：GDPR準拠のデータアクセス制御
+const gdprCompliancePolicy: PolicyRule = {
+  id: 'gdpr-cross-border-restriction',
+  effect: 'deny',
+  condition: (ctx) => {
+    const isEUData = ctx.resource.dataSubjectLocation === 'EU'
+    const isUSAccess = ctx.environment.accessLocation === 'US'
+    const hasAgreement = ctx.subject.dataTransferAgreement === true
+    return isEUData && isUSAccess && !hasAgreement
+  }
+}
+```
+
+**3. 環境ベースの制限**
+```typescript
+// 例：外部ネットワークからの機密アクセス制限
+const networkRestrictionPolicy: PolicyRule = {
+  id: 'deny-external-confidential',
+  effect: 'deny',
+  condition: (ctx) => {
+    const isExternal = !ctx.environment.ipAddress.startsWith('10.')
+    const isConfidential = ctx.resource.classification === 'confidential'
+    return isExternal && isConfidential
+  }
+}
+```
+
+#### 3.4.3 Deny機能の設計決定
+
+本実装では、ABACの本質的な要件としてDenyを完全にサポートすることを決定：
+
+| 観点 | RBAC | ABAC（本実装） |
+|------|------|--------------|
+| **Denyの有無** | なし（純粋なRBAC） | **あり（必須）** |
+| **理由** | ロールの加算的モデル | 属性の動的評価 |
+| **実装の複雑性** | シンプル | 競合解決戦略が必要 |
+| **使用例** | 組織の役割 | セキュリティ、コンプライアンス、環境制御 |
+
+### 3.5 競合解決戦略
+
+#### 3.5.1 複数ルールがマッチした場合の処理
+
+Denyを実装することで、PermitとDenyのルールが競合する可能性があるため、解決戦略が重要：
 
 **オプション1: First-Match（最初にマッチしたルール）**
 - 単純で高速
 - ルールの順序が重要
 
-**オプション2: Deny-Override（Deny優先）**
+**オプション2: Deny-Override（Deny優先）（推奨）**
 - セキュリティ原則に合致
 - 最も一般的な戦略
+- 明示的な拒否は常に優先される
 
 **オプション3: Permit-Override（Permit優先）**
 - 利便性重視
@@ -294,10 +456,11 @@ type PolicyRule = {
 ```
 - 柔軟な制御が可能
 - 学習用として様々な戦略を実装可能
+- Denyルールに高優先度を設定することでセキュリティを確保
 
-### 3.5 APIの設計
+### 3.6 APIの設計
 
-#### 3.5.1 最小限 vs 完全
+#### 3.6.1 最小限 vs 完全
 
 **オプション1: 最小限のAPI（採用）**
 ```typescript
@@ -387,14 +550,35 @@ type PolicyDecision =
 - 監査ログに必要な情報を含む
 - 型安全な結果処理
 
-#### 4.1.4 優先度ベースの競合解決
+#### 4.1.4 明示的なDenyのサポート
+
+ABACの本質的な要件として、明示的なDenyを完全にサポート：
+
+```typescript
+type PolicyRule = {
+  id: string
+  description?: string
+  effect: 'permit' | 'deny'  // 明示的なpermit/deny
+  condition: (context: EvaluationContext) => boolean
+  priority?: number
+}
+```
+
+理由：
+- **セキュリティ要件の実装**: クリアランスレベル、機密度チェック
+- **コンプライアンス対応**: GDPR等の規制要件の表現
+- **環境制御**: ネットワーク、時間帯による制限
+- **RBACとの差別化**: 動的評価には明示的な拒否が必須
+
+#### 4.1.5 優先度ベースの競合解決
 
 ```typescript
 class PolicyEvaluationEngine {
   private resolutionStrategy: 'first-match' | 'deny-override' | 'permit-override' | 'priority'
   
   evaluate(context: EvaluationContext): PolicyDecision {
-    // strategeに基づいて評価
+    // strategyに基づいて評価
+    // デフォルトはdeny-override（セキュリティ優先）
   }
 }
 ```
@@ -403,8 +587,9 @@ class PolicyEvaluationEngine {
 - 様々な戦略を学習可能
 - 実システムの多様性を理解
 - 切り替え可能な実装
+- Deny優先をデフォルトとしてセキュリティを確保
 
-#### 4.1.5 最小限のAPI設計
+#### 4.1.6 最小限のAPI設計
 
 ```typescript
 class PolicyEvaluationEngine {
