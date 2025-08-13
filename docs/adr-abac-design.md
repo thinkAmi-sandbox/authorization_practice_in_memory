@@ -591,9 +591,72 @@ const networkRestrictionPolicy: PolicyRule = {
 | **実装の複雑性** | シンプル | 競合解決戦略が必要 |
 | **使用例** | 組織の役割 | セキュリティ、コンプライアンス、環境制御 |
 
-### 3.6 競合解決戦略
+### 3.6 not-applicableの扱い
 
-#### 3.6.1 複数ルールがマッチした場合の処理
+#### 3.6.1 ポリシーがマッチしない場合の設計
+
+ABACでは、permit/denyのポリシーにマッチしない場合の扱いが重要な設計判断となります。
+
+**主要ライブラリの実装パターン:**
+
+| ライブラリ | 返り値 | not-applicable相当の扱い |
+|-----------|--------|------------------------|
+| **XACML系** | 3〜4値 | 明示的に`NotApplicable` |
+| **py-abac** | 3値 | 明示的に`NotApplicable` |
+| **CASL** | boolean | `false`として扱う |
+| **Pundit** | boolean/例外 | `false`または例外 |
+| **Casbin** | boolean | `false`として扱う |
+| **OPA** | boolean | `undefined`→`false` |
+
+**本実装の決定: 3値（permit/deny/not-applicable）を明示的に返す**
+
+理由：
+1. **XACML標準準拠**: OASIS標準では明確に3つの状態を定義
+2. **デバッグの容易性**: なぜ判定されなかったかの理由を含められる
+3. **明示的な状態表現**: ポリシー未定義と明示的拒否を区別できる
+4. **学習効果**: ABACの概念を正確に理解できる
+
+#### 3.6.2 not-applicableの解釈と実装責任
+
+**重要な原則: 解釈は呼び出し側（PEP）の責任**
+
+ABACエンジン（PDP）は評価結果として`not-applicable`を返しますが、最終的なアクセス許可/拒否の判断は呼び出し側が行います：
+
+```typescript
+// パターン1: Default Deny（推奨）
+const decision = engine.evaluate(context)
+if (decision.type === 'permit') {
+  // アクセス許可
+} else {
+  // deny または not-applicable → 拒否
+}
+
+// パターン2: フォールバック処理
+switch (decision.type) {
+  case 'permit':
+    return allowAccess()
+  case 'deny':
+    return rejectAccess()
+  case 'not-applicable':
+    // 別の認可方式にフォールバック
+    return checkRBACPermission(user, resource)
+}
+
+// パターン3: エラーとして扱う
+case 'not-applicable':
+  // ポリシー設定ミスの可能性
+  logger.warn('No applicable policy found', context)
+  return rejectWithError('Policy configuration error')
+```
+
+この設計により：
+- ABACエンジンは純粋な評価ロジックに集中
+- アプリケーション側でセキュリティポリシーを柔軟に実装可能
+- 監査ログで「明示的な拒否」と「ポリシー未適用」を区別可能
+
+### 3.7 競合解決戦略
+
+#### 3.7.1 複数ルールがマッチした場合の処理
 
 Denyを実装することで、PermitとDenyのルールが競合する可能性があるため、解決戦略が重要：
 
@@ -621,9 +684,9 @@ type PolicyRule = {
 - 学習用として様々な戦略を実装可能
 - Denyルールに高優先度を設定することでセキュリティを確保
 
-### 3.7 ポリシーの組み合わせ設計
+### 3.8 ポリシーの組み合わせ設計
 
-#### 3.7.1 単一ポリシー vs 複数ポリシー
+#### 3.8.1 単一ポリシー vs 複数ポリシー
 
 **複数ポリシーの組み合わせを前提とした設計（採用）**
 
@@ -642,9 +705,9 @@ ABACでは、複数のポリシーを組み合わせることが一般的です�
 これは、RBACの「ロールを持っているか」という単純なチェックとは対照的で、
 ABACの動的評価の強みを示しています。
 
-### 3.8 APIの設計
+### 3.9 APIの設計
 
-#### 3.8.1 最小限 vs 完全
+#### 3.9.1 最小限 vs 完全
 
 **オプション1: 最小限のAPI（採用）**
 ```typescript
