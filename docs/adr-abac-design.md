@@ -100,17 +100,17 @@ const policy: PolicyRule = {
 興味深いことに、ABACはRBACを包含できます。ロールを属性の一つとして扱うことで、RBACの機能をABAC内で実現可能：
 
 ```typescript
-// ABACでロールを属性として使用（ハイブリッドアプローチ）
-const hybridPolicy: PolicyRule = {
+// ABACでの時間・部門・クリアランス複合チェック（純粋なABACアプローチ）
+const multiAttributePolicy: PolicyRule = {
   effect: 'permit',
   condition: (ctx) => {
-    // ロールも属性の一つとして評価
-    const hasEditorRole = ctx.subject.role === 'editor'
+    // 複数の属性を動的に評価
     const inBusinessHours = ctx.environment.currentTime.getHours() >= 9
     const sameDepartment = ctx.subject.department === ctx.resource.department
+    const sufficientClearance = ctx.subject.clearanceLevel >= ctx.resource.classificationLevel
     
-    // ロール＋他の属性を組み合わせて評価
-    return hasEditorRole && inBusinessHours && sameDepartment
+    // 時間＋部門＋クリアランスの組み合わせ評価
+    return inBusinessHours && sameDepartment && sufficientClearance
   }
 }
 ```
@@ -468,24 +468,19 @@ type Attributes = Record<string, AttributeValue>
 **オプション2: 厳密な型定義（学習用として採用）**
 ```typescript
 interface SubjectAttributes {
-  userId: string
+  userName: string  // 学習用：実システムではuserIdを使用
   department: 'engineering' | 'finance' | 'hr' | 'sales'
-  role: 'admin' | 'manager' | 'developer' | 'viewer'
   clearanceLevel: 1 | 2 | 3 | 4 | 5  // 1=最低、5=最高
 }
 
 interface ResourceAttributes {
-  documentId: string
+  documentName: string  // 学習用：実システムではdocumentIdを使用
   department: 'engineering' | 'finance' | 'hr' | 'sales'
   classificationLevel: 1 | 2 | 3 | 4 | 5
-  owner: string
-  createdAt: Date
 }
 
 interface EnvironmentAttributes {
   currentTime: Date
-  ipAddress: string
-  deviceType: 'desktop' | 'mobile' | 'tablet'
   location: 'office' | 'home' | 'external'
 }
 ```
@@ -496,6 +491,122 @@ interface EnvironmentAttributes {
 - ABACの概念理解が深まる（どんな属性があるか明確）
 - 実装ミスを防げる（タイポが即座にエラーに）
 - デバッグが容易（型安全なポリシー記述）
+
+#### 3.2.2 属性の意図的な重複設計
+
+**SubjectAttributesとResourceAttributesにおける同一属性名の採用**
+
+本実装では、SubjectAttributesとResourceAttributesの両方に`department`属性を持たせ、また類似の概念として`clearanceLevel`（Subject）と`classificationLevel`（Resource）を定義しています。これは一見重複に見えますが、ABACの本質を理解するために意図的に設計された重要な決定です。
+
+**重複を許容する理由：**
+
+1. **異なる文脈の明確な表現**
+   - `subject.department`: **ユーザーが所属している部門**
+   - `resource.department`: **ドキュメントを管理している部門**
+   - 同じ「部門」という概念でも、評価の文脈が全く異なる
+
+2. **ABACの本質：属性間の関係性評価**
+   ```typescript
+   // 同一部門チェック（部門属性の比較）
+   const sameDepartment = ctx.subject.department === ctx.resource.department
+   
+   // セキュリティレベルチェック（レベル属性の比較）
+   const sufficientClearance = ctx.subject.clearanceLevel >= ctx.resource.classificationLevel
+   
+   // 両方の条件を満たす場合のみアクセス許可
+   return sameDepartment && sufficientClearance
+   ```
+
+3. **実世界のモデリングの正確な表現**
+   - **人事ファイル**: HR部門が管理（resource.department = 'hr'）
+   - **アクセス者**: エンジニア部門の社員（subject.department = 'engineering'）
+   - → 部門が異なるためアクセス拒否（同一部門のみアクセス可能ポリシーの場合）
+
+4. **名前の使い分けによる意図の明確化**
+   - `clearanceLevel`: **ユーザーのセキュリティクリアランスレベル**（アクセス権限レベル）
+   - `classificationLevel`: **ドキュメントの機密度分類レベル**（保護レベル）
+   - 意図的に異なる名前を使用することで、役割と評価方向の違いを強調
+
+**学習効果：**
+この設計により、学習者は以下を理解できます：
+- 同じ型の属性を持つエンティティ間の関係性評価がABACの核心概念であること
+- RBACの「ロールを持っているか」という単純なチェックとは対照的な、動的で柔軟な評価の仕組み
+- 属性の「重複」が実際には文脈に応じた多次元的な評価を可能にすること
+
+この属性重複は設計上の制約ではなく、ABACの強力な表現力を実現するための意図的な選択です。
+
+#### 3.2.3 属性の最小化（学習用途最適化）
+
+**学習効果を保ちつつシンプルにするための属性削減**
+
+ABACの概念理解を最優先とし、学習者の認知負荷を軽減するため、最小限の属性セットに絞り込みます。
+
+**削除対象の属性とその理由：**
+
+**SubjectAttributes（削除）:**
+- `role`: RBACとの混同を避けるため削除（ABACの純粋な学習に集中）
+
+**ResourceAttributes（削除）:**
+- `owner`: 所有者ベースの制御は発展的内容（学習の核心ではない）
+- `createdAt`: 時間ベース制御はEnvironment.currentTimeで十分
+
+**EnvironmentAttributes（削除）:**
+- `ipAddress`: locationで場所制御を代替可能（文字列処理の複雑さを回避）
+- `deviceType`: 学習には必須ではない追加的な制御
+
+**最小化後の属性構成の利点：**
+
+1. **3つの基本的な評価パターンをカバー**
+   - 文字列の等価比較: `department === department`
+   - 数値の大小比較: `clearanceLevel >= classificationLevel`
+   - 時間/場所による動的制御: `currentTime`, `location`
+
+2. **ABACの核心概念を維持**
+   - Subject-Resource間の属性比較
+   - 環境による文脈依存の制御
+   - 複数属性の組み合わせ評価
+
+3. **認知負荷の軽減**
+   - 各カテゴリー2-3属性で管理可能
+   - テストケースも簡潔に
+   - 実装時の混乱を防止
+
+この最小化により、ABACの本質的な概念（属性間の関係性評価、動的な文脈依存制御）を学習しながら、実装の複雑さを最小限に抑えることができます。
+
+#### 3.2.4 識別子の学習用最適化
+
+**ID形式から名前形式への変更**
+
+インメモリ学習環境における可読性と理解しやすさを優先し、識別子を名前ベースに変更します。
+
+**変更内容：**
+- `userId` → `userName`
+- `documentId` → `documentName`
+
+**変更理由：**
+
+1. **学習効果の向上**
+   - `userName: 'alice'` は `userId: 'user-123'` より直感的
+   - `documentName: 'financial-report.pdf'` は `documentId: 'doc-456'` より具体的
+
+2. **可読性の向上**
+   ```typescript
+   // 名前ベース（採用）
+   const context = {
+     subject: { userName: 'alice', ... },
+     resource: { documentName: 'financial-report.pdf', ... }
+   }
+   ```
+   
+3. **テストケースの理解しやすさ**
+   - 「aliceがfinancial-report.pdfにアクセス」として明確に理解可能
+
+**実システムとの違いについて：**
+- 実システムでは一意性保証のため通常IDを使用
+- インメモリ学習環境では名前の重複を避ける運用で対応
+- 学習から実践への移行時にはIDベースに変更が必要
+
+この変更により、学習者が「誰が何にアクセスしようとしているか」を直感的に理解でき、ABACのポリシー記述と評価の仕組みにより集中できるようになります。
 
 ### 3.3 評価結果の設計
 
@@ -580,20 +691,20 @@ const confidentialAccessPolicy: PolicyRule = {
   condition: (ctx) => {
     const isExternal = ctx.environment.location === 'external'
     const isHighClassification = ctx.resource.classificationLevel >= 4
-    const isNotAdmin = ctx.subject.role !== 'admin'
-    return isExternal && isHighClassification && isNotAdmin
+    const isNotHighClearance = ctx.subject.clearanceLevel < 4
+    return isExternal && isHighClassification && isNotHighClearance
   }
 }
 ```
 
 **3. 環境ベースの制限**
 ```typescript
-// 例：外部ネットワークからの機密アクセス制限
-const networkRestrictionPolicy: PolicyRule = {
+// 例：外部からの機密アクセス制限
+const externalRestrictionPolicy: PolicyRule = {
   id: 'deny-external-confidential',
   effect: 'deny',
   condition: (ctx) => {
-    const isExternal = !ctx.environment.ipAddress.startsWith('10.')
+    const isExternal = ctx.environment.location === 'external'
     const isConfidential = ctx.resource.classificationLevel >= 4
     return isExternal && isConfidential
   }
@@ -771,26 +882,21 @@ type PolicyRule = {
 #### 4.1.2 厳密な属性システム（学習用最適化）
 
 ```typescript
-// 学習効果を最大化するため、事前定義された属性型を採用
+// 学習効果を最大化するため、最小限の属性セットを採用
 interface SubjectAttributes {
-  userId: string
+  userName: string  // 学習用：実システムではuserIdを使用
   department: 'engineering' | 'finance' | 'hr' | 'sales'
-  role: 'admin' | 'manager' | 'developer' | 'viewer'
   clearanceLevel: 1 | 2 | 3 | 4 | 5
 }
 
 interface ResourceAttributes {
-  documentId: string
+  documentName: string  // 学習用：実システムではdocumentIdを使用
   department: 'engineering' | 'finance' | 'hr' | 'sales'
   classificationLevel: 1 | 2 | 3 | 4 | 5
-  owner: string
-  createdAt: Date
 }
 
 interface EnvironmentAttributes {
   currentTime: Date
-  ipAddress: string
-  deviceType: 'desktop' | 'mobile' | 'tablet'
   location: 'office' | 'home' | 'external'
 }
 
@@ -1022,23 +1128,18 @@ engine.addPolicy(clearancePolicy)
 // 評価コンテキストの作成（型安全）
 const context: EvaluationContext = {
   subject: {
-    userId: 'alice',
+    userName: 'alice',
     department: 'engineering',  // 型定義により選択肢が限定
-    clearanceLevel: 2,          // 1-5の範囲
-    role: 'developer'           // 事前定義されたロールのみ
+    clearanceLevel: 2           // 1-5の範囲
   },
   resource: {
-    documentId: 'doc-123',
+    documentName: 'financial-report.pdf',
     department: 'engineering',
-    classificationLevel: 3,
-    owner: 'bob',
-    createdAt: new Date('2024-01-01')
+    classificationLevel: 3
   },
   action: 'read',
   environment: {
     currentTime: new Date('2024-01-15T10:00:00'),
-    ipAddress: '192.168.1.100',
-    deviceType: 'desktop',      // 型定義により選択肢が限定
     location: 'office'          // office/home/externalのみ
   }
 }
@@ -1063,32 +1164,30 @@ switch (decision.type) {
 ### 6.3 複合条件の例
 
 ```typescript
-// 管理者のオフィスアクセス（複数条件の組み合わせ）
-const adminOfficeAccessPolicy: PolicyRule = {
-  id: 'admin-office-access',
-  description: '管理者によるオフィスからのアクセス',
+// オフィス内でのアクセス（複数条件の組み合わせ）
+const officeAccessPolicy: PolicyRule = {
+  id: 'office-access',
+  description: 'オフィス内での営業時間内アクセス',
   effect: 'permit',
   condition: (ctx) => {
-    const isAdmin = ctx.subject.role === 'admin'
     const isFromOffice = ctx.environment.location === 'office'
-    const isFromTrustedNetwork = (ctx.environment.ipAddress as string)
-      .startsWith('10.0.')
+    const isBusinessHours = ctx.environment.currentTime.getHours() >= 9 &&
+                           ctx.environment.currentTime.getHours() < 18
     
-    return isAdmin && isFromOffice && isFromTrustedNetwork
+    return isFromOffice && isBusinessHours
   }
 }
 
-// 時間外アクセスの制限（環境属性の活用）
-const afterHoursRestriction: PolicyRule = {
-  id: 'after-hours-restriction',
-  description: '時間外は管理者のみアクセス可能',
+// 外部からの機密文書アクセス制限（環境属性の活用）
+const externalAccessRestriction: PolicyRule = {
+  id: 'external-access-restriction',
+  description: '外部からの機密文書アクセスを制限',
   effect: 'deny',
   condition: (ctx) => {
-    const hour = (ctx.environment.currentTime as Date).getHours()
-    const isAfterHours = hour < 9 || hour >= 18
-    const isNotAdmin = ctx.subject.role !== 'admin'
+    const isExternal = ctx.environment.location === 'external'
+    const isHighClassification = ctx.resource.classificationLevel >= 4
     
-    return isAfterHours && isNotAdmin
+    return isExternal && isHighClassification
   }
 }
 ```
