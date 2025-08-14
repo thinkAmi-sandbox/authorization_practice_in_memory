@@ -620,8 +620,8 @@ evaluate(context: EvaluationContext): boolean
 **オプション2: 詳細な結果（採用）**
 ```typescript
 type PolicyDecision = 
-  | { type: 'permit'; matchedRule: PolicyRule; context: EvaluationContext }
-  | { type: 'deny'; matchedRule: PolicyRule; context: EvaluationContext }
+  | { type: 'permit'; appliedRule: PolicyRule; context: EvaluationContext }
+  | { type: 'deny'; appliedRule: PolicyRule; context: EvaluationContext }
   | { type: 'not-applicable'; reason: string }
 ```
 - デバッグ情報が豊富
@@ -635,30 +635,30 @@ type PolicyDecision =
 
 **1. 型安全性の確保**
 ```typescript
-// permit/denyの場合：マッチしたルールとコンテキストが必ず存在
+// permit/denyの場合：適用されたルールとコンテキストが必ず存在
 if (decision.type === 'permit') {
-  // TypeScriptが自動的に型を絞り込み、matchedRuleが存在することを保証
-  console.log(decision.matchedRule.id)  // エラーなし
+  // TypeScriptが自動的に型を絞り込み、appliedRuleが存在することを保証
+  console.log(decision.appliedRule.id)  // エラーなし
   console.log(decision.context)         // エラーなし
 }
 
-// not-applicableの場合：マッチしたルールは存在しない
+// not-applicableの場合：適用されたルールは存在しない
 if (decision.type === 'not-applicable') {
   console.log(decision.reason)          // エラーなし
-  // console.log(decision.matchedRule)  // コンパイルエラー（存在しない）
+  // console.log(decision.appliedRule)  // コンパイルエラー（存在しない）
 }
 ```
 
 **2. 意味的な正確性**
-- **permit/deny**: ポリシーがマッチして判定が下された → `matchedRule`と`context`が必要
-- **not-applicable**: どのポリシーもマッチしなかった → `matchedRule`は存在せず、代わりに`reason`で理由を説明
+- **permit/deny**: ポリシーがマッチして判定が下された → `appliedRule`と`context`が必要
+- **not-applicable**: どのポリシーもマッチしなかった → `appliedRule`は存在せず、代わりに`reason`で理由を説明
 
 **3. 無効な状態を表現できない設計**
 ```typescript
 // もし同じ属性を持たせた場合（悪い例）
 type PolicyDecision = {
   type: 'permit' | 'deny' | 'not-applicable'
-  matchedRule?: PolicyRule      // オプショナルになってしまう
+  appliedRule?: PolicyRule      // オプショナルになってしまう
   context?: EvaluationContext   // オプショナルになってしまう
   reason?: string               // オプショナルになってしまう
 }
@@ -667,7 +667,7 @@ type PolicyDecision = {
 const invalid: PolicyDecision = {
   type: 'permit',
   reason: 'なぜかreasonがある',  // permitなのにreasonは不要
-  // matchedRuleがない！（実行時エラーの原因）
+  // appliedRuleがない！（実行時エラーの原因）
 }
 ```
 
@@ -751,6 +751,87 @@ switch (decision.type) {
 - 実際のABACシステムとの整合性を保つ
 - 学習効果の観点から、なぜ`not-applicable`になったかを理解することが重要
 - デバッグ、監査、運用において適切な対処が可能
+
+#### 3.3.3 複数ポリシーマッチ時のルール選択
+
+**matchedRuleからappliedRuleへの命名変更**
+
+Deny-Override戦略では複数のポリシーがマッチする可能性がありますが、最終的な決定は1つのポリシーによって下されます。この「決定に使われたポリシー」を表現するために、より適切な命名を採用します。
+
+**命名の問題点**
+```typescript
+// 問題のある命名
+type PolicyDecision = 
+  | { type: 'permit'; matchedRule: PolicyRule; ... }
+  | { type: 'deny'; matchedRule: PolicyRule; ... }
+```
+
+- **matched（マッチした）**: 条件に合致した複数のポリシーを示唆
+- **実際の意味**: 最終決定を下した1つのポリシー
+- **混乱**: マッチしたが適用されなかったポリシーとの区別が困難
+
+**ABAC標準での用語調査**
+
+| ライブラリ | 用語 | 意味 |
+|-----------|------|------|
+| **XACML (OASIS標準)** | `applicable-policy` | 適用されたポリシー |
+| **OPA** | `decision` | 決定結果 |
+| **Casbin** | `explanation` | 決定の説明（どのルールが適用されたか） |
+| **py-abac** | `decision` | 決定と理由 |
+
+**採用した命名: appliedRule**
+
+```typescript
+type PolicyDecision = 
+  | { 
+      type: 'permit'
+      appliedRule: PolicyRule    // 適用されたルール
+      context: EvaluationContext
+    }
+  | { 
+      type: 'deny'
+      appliedRule: PolicyRule    // 適用されたルール
+      context: EvaluationContext
+    }
+  | { 
+      type: 'not-applicable'
+      reason: string
+    }
+```
+
+**命名変更の理由**
+
+1. **XACML標準準拠**: "applicable-policy"の概念に最も近い表現
+2. **意味の明確性**: 「適用された」＝「最終決定に使われた」ことが明確
+3. **学習効果**: 「マッチ」と「適用」の違いを理解できる
+4. **Deny-Override戦略との整合性**: 複数マッチしたが1つだけ適用される概念を正確に表現
+
+**Deny-Override戦略での具体例**
+
+```typescript
+// 3つのポリシーがある場合
+policies = [
+  { id: 'permit-dept', effect: 'permit', ... },    // マッチ
+  { id: 'permit-time', effect: 'permit', ... },    // マッチ
+  { id: 'deny-level', effect: 'deny', ... }        // マッチ
+]
+
+// Deny-Override戦略による評価結果
+{
+  type: 'deny',
+  appliedRule: { id: 'deny-level', ... },  // これが適用された
+  context: ...
+}
+// permit-deptとpermit-timeはマッチしたが適用されなかった
+```
+
+**学習効果**
+
+この命名により、学習者は以下を理解できます：
+
+- **マッチしたポリシー**: 条件を満たしたすべてのポリシー
+- **適用されたポリシー**: 競合解決戦略によって最終決定に使われた1つのポリシー
+- **Deny-Override戦略**: 複数マッチしても1つだけが適用される仕組み
 
 ### 3.4 Effect（効果）の用語選定
 
@@ -1190,12 +1271,12 @@ type EvaluationContext = {
 type PolicyDecision = 
   | { 
       type: 'permit'
-      matchedRule: PolicyRule
+      appliedRule: PolicyRule
       context: EvaluationContext
     }
   | { 
       type: 'deny'
-      matchedRule: PolicyRule
+      appliedRule: PolicyRule
       context: EvaluationContext
     }
   | { 
@@ -1420,10 +1501,10 @@ const decision = engine.evaluate(context)
 // 結果の処理
 switch (decision.type) {
   case 'permit':
-    console.log(`アクセス許可: ${decision.matchedRule.description}`)
+    console.log(`アクセス許可: ${decision.appliedRule.description}`)
     break
   case 'deny':
-    console.log(`アクセス拒否: ${decision.matchedRule.description}`)
+    console.log(`アクセス拒否: ${decision.appliedRule.description}`)
     break
   case 'not-applicable':
     console.log(`該当ポリシーなし: ${decision.reason}`)
