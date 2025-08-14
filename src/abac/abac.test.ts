@@ -406,32 +406,95 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
         describe('SubjectとResourceとEnvironmentの組み合わせ', () => {
           describe('「同一部門」、もしくは、「locationがofficeでアクセスした人がclearanceLevelが5、actionがread」の場合は許可と定義したポリシー', () => {
+            const engine = new PolicyEvaluationEngine();
+            const policy = createPermitPolicy('complex-policy-1', (ctx) => 
+              // 同一部門の場合は許可
+              (ctx.subject.department === ctx.resource.department) ||
+              // もしくは、オフィスからのアクセスで、クリアランスレベル5、読み取り操作の場合は許可
+              (ctx.environment.location === 'office' && 
+               ctx.subject.clearanceLevel === 5 && 
+               ctx.action === 'read')
+            );
+            engine.addPolicy(policy);
+
             describe('同一部門', () => {
               describe('locationがoffice', () => {
                 describe('clearanceLevelが4', () => {
                   describe('actionがread', () => {
-                    it('Permitと評価されること', () => {
+                    const context = createDefaultContext();
+                    context.subject.department = 'engineering';
+                    context.resource.department = 'engineering';
+                    context.subject.clearanceLevel = 4;
+                    context.action = 'read';
+                    context.environment.location = 'office';
 
+                    it('Permitと評価されること', () => {
+                      const result = engine.evaluate(context);
+
+                      expect(result).toEqual({
+                        type: 'permit',
+                        appliedRule: policy,
+                        context: context
+                      });
                     })
                   })
 
                   describe('actionがwrite', () => {
-                    it('Permitと評価されること', () => {
+                    const context = createDefaultContext();
+                    context.subject.department = 'engineering';
+                    context.resource.department = 'engineering';
+                    context.subject.clearanceLevel = 4;
+                    context.action = 'write';
+                    context.environment.location = 'office';
 
+                    it('Permitと評価されること', () => {
+                      const result = engine.evaluate(context);
+
+                      expect(result).toEqual({
+                        type: 'permit',
+                        appliedRule: policy,
+                        context: context
+                      });
                     })
                   })
                 })
 
                 describe('clearanceLevelが5', () => {
                   describe('actionがread', () => {
-                    it('Permitと評価されること', () => {
+                    const context = createDefaultContext();
+                    context.subject.department = 'engineering';
+                    context.resource.department = 'engineering';
+                    context.subject.clearanceLevel = 5;
+                    context.action = 'read';
+                    context.environment.location = 'office';
 
+                    it('Permitと評価されること', () => {
+                      const result = engine.evaluate(context);
+
+                      expect(result).toEqual({
+                        type: 'permit',
+                        appliedRule: policy,
+                        context: context
+                      });
                     })
                   })
 
                   describe('actionがwrite', () => {
-                    it('Permitと評価されること', () => {
+                    const context = createDefaultContext();
+                    context.subject.department = 'engineering';
+                    context.resource.department = 'engineering';
+                    context.subject.clearanceLevel = 5;
+                    context.action = 'write';
+                    context.environment.location = 'office';
 
+                    it('Permitと評価されること', () => {
+                      const result = engine.evaluate(context);
+
+                      expect(result).toEqual({
+                        type: 'permit',
+                        appliedRule: policy,
+                        context: context
+                      });
                     })
                   })
                 })
@@ -440,28 +503,80 @@ describe('ABAC (Attribute-Based Access Control)', () => {
               describe('locationがhome', () => {
                 describe('clearanceLevelが4', () => {
                   describe('actionがread', () => {
-                    it('Permitと評価されること', () => {
+                    const context = createDefaultContext();
+                    context.subject.department = 'engineering';
+                    context.resource.department = 'engineering';
+                    context.subject.clearanceLevel = 4;
+                    context.action = 'read';
+                    context.environment.location = 'home';
 
+                    it('Permitと評価されること', () => {
+                      const result = engine.evaluate(context);
+
+                      expect(result).toEqual({
+                        type: 'permit',
+                        appliedRule: policy,
+                        context: context
+                      });
                     })
                   })
 
                   describe('actionがwrite', () => {
-                    it('Permitと評価されること', () => {
+                    const context = createDefaultContext();
+                    context.subject.department = 'engineering';
+                    context.resource.department = 'engineering';
+                    context.subject.clearanceLevel = 4;
+                    context.action = 'write';
+                    context.environment.location = 'home';
 
+                    it('Permitと評価されること', () => {
+                      const result = engine.evaluate(context);
+
+                      expect(result).toEqual({
+                        type: 'permit',
+                        appliedRule: policy,
+                        context: context
+                      });
                     })
                   })
                 })
 
                 describe('clearanceLevelが5', () => {
                   describe('actionがread', () => {
-                    it('Permitと評価されること', () => {
+                    const context = createDefaultContext();
+                    context.subject.department = 'engineering';
+                    context.resource.department = 'engineering';
+                    context.subject.clearanceLevel = 5;
+                    context.action = 'read';
+                    context.environment.location = 'home';
 
+                    it('Permitと評価されること', () => {
+                      const result = engine.evaluate(context);
+
+                      expect(result).toEqual({
+                        type: 'permit',
+                        appliedRule: policy,
+                        context: context
+                      });
                     })
                   })
 
                   describe('actionがwrite', () => {
-                    it('Permitと評価されること', () => {
+                    const context = createDefaultContext();
+                    context.subject.department = 'engineering';
+                    context.resource.department = 'engineering';
+                    context.subject.clearanceLevel = 5;
+                    context.action = 'write';
+                    context.environment.location = 'home';
 
+                    it('Permitと評価されること', () => {
+                      const result = engine.evaluate(context);
+
+                      expect(result).toEqual({
+                        type: 'permit',
+                        appliedRule: policy,
+                        context: context
+                      });
                     })
                   })
                 })
@@ -472,28 +587,77 @@ describe('ABAC (Attribute-Based Access Control)', () => {
               describe('locationがoffice', () => {
                 describe('clearanceLevelが4', () => {
                   describe('actionがread', () => {
-                    it('not-applicableと評価されること', () => {
+                    const context = createDefaultContext();
+                    context.subject.department = 'engineering';
+                    context.resource.department = 'finance';
+                    context.subject.clearanceLevel = 4;
+                    context.action = 'read';
+                    context.environment.location = 'office';
 
+                    it('not-applicableと評価されること', () => {
+                      const result = engine.evaluate(context);
+
+                      expect(result).toEqual({
+                        type: 'not-applicable',
+                        reason: 'Permitポリシーを含む構成で、どの条件にもマッチしない'
+                      });
                     })
                   })
 
                   describe('actionがwrite', () => {
-                    it('not-applicableと評価されること', () => {
+                    const context = createDefaultContext();
+                    context.subject.department = 'engineering';
+                    context.resource.department = 'finance';
+                    context.subject.clearanceLevel = 4;
+                    context.action = 'write';
+                    context.environment.location = 'office';
 
+                    it('not-applicableと評価されること', () => {
+                      const result = engine.evaluate(context);
+
+                      expect(result).toEqual({
+                        type: 'not-applicable',
+                        reason: 'Permitポリシーを含む構成で、どの条件にもマッチしない'
+                      });
                     })
                   })
                 })
 
                 describe('clearanceLevelが5', () => {
                   describe('actionがread', () => {
-                    it('Permitと評価されること', () => {
+                    const context = createDefaultContext();
+                    context.subject.department = 'engineering';
+                    context.resource.department = 'finance';
+                    context.subject.clearanceLevel = 5;
+                    context.action = 'read';
+                    context.environment.location = 'office';
 
+                    it('Permitと評価されること', () => {
+                      const result = engine.evaluate(context);
+
+                      expect(result).toEqual({
+                        type: 'permit',
+                        appliedRule: policy,
+                        context: context
+                      });
                     })
                   })
 
                   describe('actionがwrite', () => {
-                    it('not-applicableと評価されること', () => {
+                    const context = createDefaultContext();
+                    context.subject.department = 'engineering';
+                    context.resource.department = 'finance';
+                    context.subject.clearanceLevel = 5;
+                    context.action = 'write';
+                    context.environment.location = 'office';
 
+                    it('not-applicableと評価されること', () => {
+                      const result = engine.evaluate(context);
+
+                      expect(result).toEqual({
+                        type: 'not-applicable',
+                        reason: 'Permitポリシーを含む構成で、どの条件にもマッチしない'
+                      });
                     })
                   })
                 })
@@ -502,28 +666,76 @@ describe('ABAC (Attribute-Based Access Control)', () => {
               describe('locationがhome', () => {
                 describe('clearanceLevelが4', () => {
                   describe('actionがread', () => {
-                    it('not-applicableと評価されること', () => {
+                    const context = createDefaultContext();
+                    context.subject.department = 'engineering';
+                    context.resource.department = 'finance';
+                    context.subject.clearanceLevel = 4;
+                    context.action = 'read';
+                    context.environment.location = 'home';
 
+                    it('not-applicableと評価されること', () => {
+                      const result = engine.evaluate(context);
+
+                      expect(result).toEqual({
+                        type: 'not-applicable',
+                        reason: 'Permitポリシーを含む構成で、どの条件にもマッチしない'
+                      });
                     })
                   })
 
                   describe('actionがwrite', () => {
-                    it('not-applicableと評価されること', () => {
+                    const context = createDefaultContext();
+                    context.subject.department = 'engineering';
+                    context.resource.department = 'finance';
+                    context.subject.clearanceLevel = 4;
+                    context.action = 'write';
+                    context.environment.location = 'home';
 
+                    it('not-applicableと評価されること', () => {
+                      const result = engine.evaluate(context);
+
+                      expect(result).toEqual({
+                        type: 'not-applicable',
+                        reason: 'Permitポリシーを含む構成で、どの条件にもマッチしない'
+                      });
                     })
                   })
                 })
 
                 describe('clearanceLevelが5', () => {
                   describe('actionがread', () => {
-                    it('not-applicableと評価されること', () => {
+                    const context = createDefaultContext();
+                    context.subject.department = 'engineering';
+                    context.resource.department = 'finance';
+                    context.subject.clearanceLevel = 5;
+                    context.action = 'read';
+                    context.environment.location = 'home';
 
+                    it('not-applicableと評価されること', () => {
+                      const result = engine.evaluate(context);
+
+                      expect(result).toEqual({
+                        type: 'not-applicable',
+                        reason: 'Permitポリシーを含む構成で、どの条件にもマッチしない'
+                      });
                     })
                   })
 
                   describe('actionがwrite', () => {
-                    it('not-applicableと評価されること', () => {
+                    const context = createDefaultContext();
+                    context.subject.department = 'engineering';
+                    context.resource.department = 'finance';
+                    context.subject.clearanceLevel = 5;
+                    context.action = 'write';
+                    context.environment.location = 'home';
 
+                    it('not-applicableと評価されること', () => {
+                      const result = engine.evaluate(context);
+
+                      expect(result).toEqual({
+                        type: 'not-applicable',
+                        reason: 'Permitポリシーを含む構成で、どの条件にもマッチしない'
+                      });
                     })
                   })
                 })
