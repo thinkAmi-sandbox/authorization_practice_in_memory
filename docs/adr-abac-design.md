@@ -785,6 +785,62 @@ case 'not-applicable':
 - アプリケーション側でセキュリティポリシーを柔軟に実装可能
 - 監査ログで「明示的な拒否」と「ポリシー未適用」を区別可能
 
+#### 3.6.3 Denyポリシーのみの場合の挙動
+
+**設計決定：Denyポリシーのみが存在し、条件にマッチしなかった場合**
+
+標準的なABACの動作として、以下の評価ルールを採用：
+
+```typescript
+// Denyポリシーのみが登録されている場合の評価フロー
+if (denyPolicies.length > 0 && permitPolicies.length === 0) {
+  // すべてのDenyポリシーを評価
+  for (const policy of denyPolicies) {
+    if (policy.condition(context)) {
+      return { type: 'deny', matchedRule: policy, context }
+    }
+  }
+  // どのDenyポリシーにもマッチしない
+  return { type: 'not-applicable', reason: 'No applicable policies found' }
+}
+```
+
+**この設計の理由：**
+
+1. **XACML標準準拠**: OASIS標準では、ポリシーがマッチしない場合は明確にNotApplicableを返す
+2. **明示的な意図の表現**: 
+   - Denyポリシーは「特定の条件下での明示的な拒否」を意味する
+   - 条件にマッチしない = そのポリシーは適用されない
+   - Permitポリシーが存在しない = 許可する根拠がない
+3. **セキュリティの観点**: 
+   - not-applicableの解釈はPEP（呼び出し側）の責任
+   - 多くの実装では「Default Deny」パターンでnot-applicableも拒否として扱う
+   - しかし、PDPは純粋な評価結果を返すべき
+
+**具体例：**
+```typescript
+// 外部からの機密文書アクセスを拒否するポリシーのみが存在
+const externalDenyPolicy: PolicyRule = {
+  id: 'deny-external-confidential',
+  effect: 'deny',
+  condition: (ctx) => 
+    ctx.environment.location === 'external' && 
+    ctx.resource.classificationLevel >= 4
+}
+
+// オフィスからのアクセスの場合
+const context = {
+  environment: { location: 'office' },  // externalではない
+  resource: { classificationLevel: 5 }
+}
+
+// 評価結果: not-applicable
+// 理由: Denyポリシーの条件（external）にマッチしない
+// Permitポリシーが存在しないため、許可の根拠もない
+```
+
+この設計により、ABACエンジンは「ポリシーが適用されなかった」ことを明確に示し、最終的なアクセス制御の判断をアプリケーション側に委ねます。
+
 ### 3.7 競合解決戦略
 
 #### 3.7.1 複数ルールがマッチした場合の処理
