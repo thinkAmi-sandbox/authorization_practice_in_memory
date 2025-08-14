@@ -145,6 +145,12 @@ export type PolicyDecision =
  * Deny-Override戦略に基づいて最終的な決定を下す
  */
 export class PolicyEvaluationEngine {
+  private REASONS = {
+    unregistered: 'ポリシーが1つも登録されていない',
+    noMatch: 'Permitポリシーを含む構成で、どの条件にもマッチしない',
+    noMatchDenyOnly: 'Denyポリシーのみ存在し、条件にマッチしない'
+  } as const;
+
   /**
    * 登録されたポリシールールを管理
    * key: ポリシーID, value: ポリシールール
@@ -177,6 +183,10 @@ export class PolicyEvaluationEngine {
     // - 全ポリシーを順次評価
     // - Denyポリシーの優先処理
     // - 適切なreason文字列の設定
+    if (this.policies.size === 0) {
+      return { type: 'not-applicable', reason: this.REASONS.unregistered }
+    }
+
     throw new Error('evaluate method not implemented')
   }
 
@@ -186,8 +196,7 @@ export class PolicyEvaluationEngine {
    * @param rule 追加するポリシールール
    */
   addPolicy(rule: PolicyRule): void {
-    // TODO: ポリシーをpoliciesマップに追加する実装
-    throw new Error('addPolicy method not implemented')
+    this.policies.set(rule.id, rule)
   }
 
   /**
@@ -196,7 +205,6 @@ export class PolicyEvaluationEngine {
    * @param ruleId 削除するポリシーのID
    */
   removePolicy(ruleId: string): void {
-    // TODO: 指定されたIDのポリシーをpoliciesマップから削除する実装
-    throw new Error('removePolicy method not implemented')
+    this.policies.delete(ruleId)
   }
 }
