@@ -684,9 +684,10 @@ return {
 }
 ```
 
-**2. ポリシーは存在するが、どれも条件にマッチしない**
+**2. Permitポリシーを含む構成で、どの条件にもマッチしない**
 ```typescript
-// 複数のポリシーがあるが、すべての条件がfalse
+// PermitとDenyの両方（またはPermitのみ）が存在するが、すべての条件がfalse
+// 正常な動作の一部（条件を満たさないだけ）
 return { 
   type: 'not-applicable', 
   reason: 'No applicable policies found' 
@@ -695,7 +696,8 @@ return {
 
 **3. Denyポリシーのみ存在し、条件にマッチしない**
 ```typescript
-// Permitポリシーがなく、Denyポリシーの条件も満たさない
+// Permitポリシーが全く存在せず、Denyポリシーの条件も満たさない
+// 設定ミスの可能性（Permitポリシーが未設定）
 return { 
   type: 'not-applicable', 
   reason: 'Only deny policies exist, none matched' 
