@@ -867,6 +867,95 @@ Denyを実装することで、PermitとDenyのルールが競合する可能性
 - 柔軟な制御が可能だが実装が複雑
 - 学習用実装ではシンプルなDeny-Overrideのみを採用
 
+#### 3.7.2 Deny-Override戦略の詳細な評価ルール
+
+**標準的なDeny-Override戦略における評価決定**
+
+OASIS XACML 3.0標準およびCasbin、OPA等の主要ABACライブラリで採用されている標準的なDeny-Override戦略では、以下の厳密な評価ルールに従います：
+
+**基本的な優先順位:**
+```
+Deny > Permit > Not-Applicable
+```
+
+**評価アルゴリズム:**
+1. **最優先**: 一つでもDenyがあれば最終結果は**Deny**
+2. **次優先**: Denyがなく、Permitがあれば最終結果は**Permit**
+3. **最後**: すべてがNot-Applicableの場合のみ最終結果は**Not-Applicable**
+
+**具体的な競合パターンと評価結果:**
+
+| 競合パターン | 最終決定 | 理由 |
+|-------------|----------|------|
+| **Deny + Permit** | **Deny** | セキュリティファースト（Fail Secure） |
+| **Deny + Not-Applicable** | **Deny** | 明示的な拒否が優先 |
+| **Permit + Not-Applicable** | **Permit** | 許可の根拠があり、拒否がない |
+| **Deny + Permit + Not-Applicable** | **Deny** | Denyが一つでもあれば拒否 |
+
+**重要な評価ケース:**
+
+**ケース1: Not-ApplicableとDenyの競合**
+```typescript
+// ポリシー1: Not-Applicable（条件にマッチしない）
+// ポリシー2: Deny（条件にマッチし、拒否）
+// → 結果: Deny
+```
+理由: Denyが一つでも存在すれば、他のNot-Applicableは無視される
+
+**ケース2: PermitとNot-Applicableの競合**
+```typescript
+// ポリシー1: Permit（条件にマッチし、許可）
+// ポリシー2: Not-Applicable（条件にマッチしない）
+// → 結果: Permit
+```
+理由: Denyが存在しないため、Permitが優先される
+
+**XACML標準での正式定義:**
+
+OASIS XACML 3.0標準では、Deny-Overrideアルゴリズムを以下のように定義：
+
+```
+1. いずれかのポリシーがDenyを返す → 最終決定: Deny
+2. すべてのポリシーがPermitまたはNot-Applicable、
+   かつ少なくとも1つがPermit → 最終決定: Permit
+3. すべてのポリシーがNot-Applicable → 最終決定: Not-Applicable
+```
+
+**実装における評価フロー:**
+```typescript
+function evaluateWithDenyOverride(policies: PolicyRule[], context: EvaluationContext) {
+  let hasPermit = false
+  
+  // Step 1: Denyを最優先で探す
+  for (const policy of policies) {
+    const result = policy.evaluate(context)
+    if (result === 'deny') {
+      return 'deny'  // 即座にDenyを返す（他は評価不要）
+    }
+    if (result === 'permit') {
+      hasPermit = true
+    }
+  }
+  
+  // Step 2: Denyがない場合、Permitがあるか確認
+  if (hasPermit) {
+    return 'permit'
+  }
+  
+  // Step 3: すべてNot-Applicable
+  return 'not-applicable'
+}
+```
+
+**セキュリティ設計の原則:**
+
+この戦略は「**Fail Secure**」の原則に基づき設計されており：
+- **安全側への倒し込み**: 不明確な場合は拒否を選択
+- **明示的な制御**: 許可には明確な根拠が必要
+- **拒否の優先**: セキュリティ要件を最優先
+
+本実装でも、この標準的なDeny-Override戦略に完全準拠することで、実際のABACシステムとの整合性を保ち、学習効果を最大化します。
+
 ### 3.8 ポリシーの組み合わせ設計
 
 #### 3.8.1 単一ポリシー vs 複数ポリシー
