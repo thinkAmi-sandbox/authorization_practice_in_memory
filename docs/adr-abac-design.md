@@ -627,6 +627,129 @@ type PolicyDecision =
 - デバッグ情報が豊富
 - なぜ許可/拒否されたかが明確
 
+#### 3.3.2 not-applicableのreasonフィールドの設計決定
+
+**Tagged Unionパターンの採用理由**
+
+本実装では、`PolicyDecision`の`type`ごとに異なる属性を持たせるTagged Union（判別共用体）パターンを採用しています。これは一見冗長に見えますが、以下の重要な設計上の利点があります：
+
+**1. 型安全性の確保**
+```typescript
+// permit/denyの場合：マッチしたルールとコンテキストが必ず存在
+if (decision.type === 'permit') {
+  // TypeScriptが自動的に型を絞り込み、matchedRuleが存在することを保証
+  console.log(decision.matchedRule.id)  // エラーなし
+  console.log(decision.context)         // エラーなし
+}
+
+// not-applicableの場合：マッチしたルールは存在しない
+if (decision.type === 'not-applicable') {
+  console.log(decision.reason)          // エラーなし
+  // console.log(decision.matchedRule)  // コンパイルエラー（存在しない）
+}
+```
+
+**2. 意味的な正確性**
+- **permit/deny**: ポリシーがマッチして判定が下された → `matchedRule`と`context`が必要
+- **not-applicable**: どのポリシーもマッチしなかった → `matchedRule`は存在せず、代わりに`reason`で理由を説明
+
+**3. 無効な状態を表現できない設計**
+```typescript
+// もし同じ属性を持たせた場合（悪い例）
+type PolicyDecision = {
+  type: 'permit' | 'deny' | 'not-applicable'
+  matchedRule?: PolicyRule      // オプショナルになってしまう
+  context?: EvaluationContext   // オプショナルになってしまう
+  reason?: string               // オプショナルになってしまう
+}
+
+// 無効な状態が表現可能になってしまう
+const invalid: PolicyDecision = {
+  type: 'permit',
+  reason: 'なぜかreasonがある',  // permitなのにreasonは不要
+  // matchedRuleがない！（実行時エラーの原因）
+}
+```
+
+**not-applicableが発生する複数のケース**
+
+ABACシステムでは、`not-applicable`になる理由は「ポリシーにマッチするものがなかった」だけではありません：
+
+**1. ポリシーが一つも登録されていない**
+```typescript
+// エンジンにポリシーが未登録
+return { 
+  type: 'not-applicable', 
+  reason: 'No policies registered' 
+}
+```
+
+**2. ポリシーは存在するが、どれも条件にマッチしない**
+```typescript
+// 複数のポリシーがあるが、すべての条件がfalse
+return { 
+  type: 'not-applicable', 
+  reason: 'No applicable policies found' 
+}
+```
+
+**3. Denyポリシーのみ存在し、条件にマッチしない**
+```typescript
+// Permitポリシーがなく、Denyポリシーの条件も満たさない
+return { 
+  type: 'not-applicable', 
+  reason: 'Only deny policies exist, none matched' 
+}
+```
+
+**4. ポリシー評価中のエラー（将来的な拡張）**
+```typescript
+// 将来的な拡張：評価中の例外処理など
+return { 
+  type: 'not-applicable', 
+  reason: 'Policy evaluation error: ...' 
+}
+```
+
+**reasonフィールドの価値**
+
+**デバッグの観点**
+- **問題の特定が容易**: 「ポリシーがない」のか「条件が合わない」のかがすぐ分かる
+- **設定ミスの発見**: Permitポリシーの設定忘れなどを検出可能
+
+**監査の観点**
+```typescript
+// 監査ログで詳細な記録が可能
+logger.info({
+  result: 'not-applicable',
+  reason: decision.reason,  // 具体的な理由が記録される
+  context: context
+})
+```
+
+**運用の観点**
+```typescript
+switch (decision.type) {
+  case 'not-applicable':
+    if (decision.reason === 'No policies registered') {
+      // 初期設定エラーとして管理者に通知
+      alertAdmin('ABAC engine not configured')
+    } else if (decision.reason.includes('Only deny policies')) {
+      // Permitポリシーの追加を促す
+      logger.warn('Consider adding permit policies')
+    }
+    break
+}
+```
+
+**業界標準との整合性**
+
+主要なABACライブラリ（XACML、py-abac等）では、`not-applicable`の理由を含めることが一般的です。この設計により：
+
+- 実際のABACシステムとの整合性を保つ
+- 学習効果の観点から、なぜ`not-applicable`になったかを理解することが重要
+- デバッグ、監査、運用において適切な対処が可能
+
 ### 3.4 Effect（効果）の用語選定
 
 #### 3.4.1 permit vs allow の選択
