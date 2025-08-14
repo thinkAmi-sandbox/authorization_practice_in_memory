@@ -218,8 +218,11 @@ describe('ABAC (Attribute-Based Access Control)', () => {
           describe('営業時間内(09:00:00-17:00:00)のみアクセスを許可', () => {
             const engine = new PolicyEvaluationEngine();
             const policy = createPermitPolicy('business-hours-1', (ctx) => {
-              const hour = ctx.environment.currentTime.getHours();
-              return hour >= 9 && hour <= 17;
+              const currentTime = ctx.environment.currentTime;
+              const currentSeconds = currentTime.getHours() * 3600 + currentTime.getMinutes() * 60 + currentTime.getSeconds();
+              const startSeconds = 9 * 3600;   // 09:00:00
+              const endSeconds = 17 * 3600;    // 17:00:00
+              return startSeconds <= currentSeconds && currentSeconds <= endSeconds;
             });
             engine.addPolicy(policy);
 

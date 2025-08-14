@@ -167,32 +167,53 @@ export class PolicyEvaluationEngine {
 
   /**
    * 与えられたコンテキストに対してポリシーを評価し、アクセス決定を返す
-   * 
+   *
    * 実装すべき評価アルゴリズム（Deny-Override戦略）:
    * 1. すべてのポリシーを評価し、条件にマッチするものを特定
    * 2. 一つでもDenyポリシーがマッチした場合、即座にDenyを返す
-   * 3. Denyがなく、Permitポリシーがマッチした場合、Permitを返す  
+   * 3. Denyがなく、Permitポリシーがマッチした場合、Permitを返す
    * 4. どのポリシーもマッチしない場合、not-applicableを返す
-   * 
+   *
    * @param context 評価コンテキスト（subject, resource, action, environment）
    * @returns 評価結果（permit/deny/not-applicable）
    */
   evaluate(context: EvaluationContext): PolicyDecision {
-    // TODO: Deny-Override戦略に基づくポリシー評価ロジックを実装
-    // ヒント: 
-    // - 全ポリシーを順次評価
-    // - Denyポリシーの優先処理
-    // - 適切なreason文字列の設定
     if (this.policies.size === 0) {
-      return { type: 'not-applicable', reason: this.REASONS.unregistered }
+      return {type: 'not-applicable', reason: this.REASONS.unregistered}
     }
 
-    throw new Error('evaluate method not implemented')
+    const denyRules = [...this.policies.values()].filter(rule => rule.effect === 'deny')
+    for (const rule of denyRules) {
+      if (rule.condition(context)) {
+        return {
+          type: 'deny',
+          appliedRule: rule,
+          context: context
+        }
+      }
+    }
+
+    const permitRules = [...this.policies.values()].filter(rule => rule.effect === 'permit')
+    for (const rule of permitRules) {
+      if (rule.condition(context)) {
+        return {
+          type: 'permit',
+          appliedRule: rule,
+          context: context
+        }
+      }
+    }
+
+    if (denyRules.length > 0 && permitRules.length === 0) {
+      return {type: 'not-applicable', reason: this.REASONS.noMatchDenyOnly}
+    }
+
+    return {type: 'not-applicable', reason: this.REASONS.noMatch}
   }
 
   /**
    * 新しいポリシールールをエンジンに追加
-   * 
+   *
    * @param rule 追加するポリシールール
    */
   addPolicy(rule: PolicyRule): void {
@@ -201,7 +222,7 @@ export class PolicyEvaluationEngine {
 
   /**
    * 指定されたIDのポリシールールをエンジンから削除
-   * 
+   *
    * @param ruleId 削除するポリシーのID
    */
   removePolicy(ruleId: string): void {
