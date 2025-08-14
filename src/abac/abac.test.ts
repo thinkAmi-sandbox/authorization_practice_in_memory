@@ -10,7 +10,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
   describe('単一ポリシー', () => {
     describe('単純な条件評価', () => {
       describe('Permitポリシーの条件を満たす', () => {
-        it('Permitと評価され、appliedRuleに決定を下したポリシーが設定されること', () => {
+        it('Permitと評価され、appliedRuleにPermitポリシーが設定されること', () => {
 
         })
       })
@@ -22,7 +22,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
       })
 
       describe('Denyポリシーの条件を満たす', () => {
-        it('Denyと評価され、appliedRuleに決定を下したポリシーが設定されること', () => {
+        it('Denyと評価され、appliedRuleにDenyポリシーが設定されること', () => {
 
         })
       })
@@ -276,13 +276,13 @@ describe('ABAC (Attribute-Based Access Control)', () => {
   describe('複数ポリシー', () => {
     describe('同一の評価', () => {
       describe('すべての評価がPermit', () => {
-        it('Permitと評価され、appliedRuleには決定を下した最初のポリシーが設定されること', () => {
+        it('Permitと評価され、appliedRuleにはPermitポリシーが設定されること', () => {
 
         })
       })
 
       describe('すべての評価がDeny', () => {
-        it('Denyと評価され、appliedRuleには決定を下した最初のポリシーが設定されること', () => {
+        it('Denyと評価され、appliedRuleにはDenyポリシーが設定されること', () => {
 
         })
       })
@@ -310,19 +310,37 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
     describe('評価の競合（Deny-Override）', () => {
       describe('評価がPermitとDenyで競合', () => {
-        it('Denyと評価され、appliedRuleには決定を下した最初のポリシーが設定されること', () => {
+        it('Denyと評価され、appliedRuleにはDenyポリシーが設定されること', () => {
 
         })
       })
 
       describe('評価がPermitとnot-applicableで競合', () => {
-        it('Permitと評価され、appliedRuleには決定を下した最初のポリシーが設定されること', () => {
+        it('Permitと評価され、appliedRuleにはPermitポリシーが設定されること', () => {
 
         })
       })
 
       describe('評価がDenyとnot-applicableで競合', () => {
-        it('Denyと評価され、appliedRuleには決定を下した最初のポリシーが設定されること', () => {
+        it('Denyと評価され、appliedRuleにはDenyポリシーが設定されること', () => {
+
+        })
+      })
+
+      describe('評価がPermit、Deny、not-applicableで競合', () => {
+        it('Denyと評価され、appliedRuleにはDenyポリシーが設定されること', () => {
+
+        })
+      })
+
+      describe('評価順がPermit、Deny、Permitで競合', () => {
+        it('Denyと評価され、appliedRuleにはDenyポリシーが設定されること', () => {
+
+        })
+      })
+
+      describe('評価順がPermit、not-applicable、Permitで競合', () => {
+        it('Permitと評価され、appliedRuleには最初のPermitポリシーが設定されること', () => {
 
         })
       })
