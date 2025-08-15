@@ -68,7 +68,19 @@ alice manages dev-team AND bob memberOf dev-team
 | **中心概念** | 属性＋ポリシー | 関係性＋グラフ |
 | **権限判定** | ルールベース | パス探索ベース |
 
-### 2.6 Google Zanzibarから学ぶReBAC
+### 2.6 ReBACの核心概念の学習
+
+ReBACの学習において重要な概念：
+
+1. **エンティティ（Entity）**: ユーザー、グループ、リソースなどの対象
+2. **関係性（Relationship）**: エンティティ間のつながり
+3. **関係性タプル（Tuple）**: `(subject, relation, object)`の3つ組でエンティティ間の関係を表現
+4. **推移的権限（Transitive Permission）**: 関係の連鎖から権限を導出
+5. **グラフ探索（Graph Traversal）**: 関係性ネットワークを辿って権限の根拠を発見
+
+### 2.7 主要ReBACシステムの学習
+
+#### 2.7.1 Google Zanzibar - ReBACの先駆者
 
 Google Zanzibarは、YouTube、Drive、Cloudなどで使用されている大規模ReBACシステムです。その核心概念：
 
@@ -77,9 +89,120 @@ Google Zanzibarは、YouTube、Drive、Cloudなどで使用されている大規
 3. **一貫性保証**: スナップショットによる読み取り一貫性
 4. **性能最適化**: 関係性のキャッシュと並列探索
 
+#### 2.7.2 実際のReBACライブラリの実装パターン
+
+主要なReBACライブラリの実装パターンを調査し、学習用実装の参考にします：
+
+**完全なReBACサポート 🏗️**
+
+**SpiceDB (AuthZed)** - Zanzibarインスパイア
+```
+// Schema定義による関係性の記述
+definition document {
+  relation owner: user
+  relation editor: user | group#member
+  permission edit = owner + editor
+}
+```
+- Zanzibarの概念を忠実に実装
+- 専用のスキーマ言語でリレーションを定義
+- グラフ最適化とキャッシュを内蔵
+
+**OpenFGA (Okta/Auth0)** - CNCF graduated project
+```json
+{
+  "type_definitions": [
+    {
+      "type": "document",
+      "relations": {
+        "owner": { "this": {} },
+        "can_edit": { "computedUserset": { "object": "", "relation": "owner" } }
+      }
+    }
+  ]
+}
+```
+- JSONベースの型定義
+- RESTful API でアクセス
+- Zanzibarの軽量版として位置づけ
+
+**Ory Keto** - Goベースの実装
+```
+// APIによる関係の管理
+PUT /relation-tuples
+{
+  "namespace": "files",
+  "object": "document1",
+  "relation": "owner",
+  "subject_id": "alice"
+}
+```
+- RESTful APIによるシンプルな操作
+- 関係性の追加・削除・検索
+- Docker containerとして配布
+
+**限定的なReBACサポート ⚡**
+
+**OPA (Open Policy Agent)** - Rego言語による関係性表現
+```rego
+allow {
+  user_owns_document[input.user][input.document]
+}
+
+user_owns_document[user][doc] {
+  ownership[user][doc] = true
+}
+
+user_owns_document[user][doc] {
+  manages[user][team]
+  team_owns_document[team][doc]
+}
+```
+- 宣言的なルール記述
+- 関係性の推論が可能
+- 汎用的なポリシーエンジン
+
+**Cedar (AWS)** - 構造化されたポリシー言語
+```
+permit(
+  principal in Group::"editors",
+  action == Action::"edit",
+  resource
+) when {
+  principal has department &&
+  principal.department == resource.department
+};
+```
+- 属性ベースだが、グループ関係も表現可能
+- type-safeなポリシー記述
+- AWS系サービスとの統合
+
+#### 2.7.3 実装アプローチの分類
+
+| アプローチ | 代表例 | 特徴 | 学習への影響 |
+|----------|--------|------|------------|
+| **純粋なReBAC** | SpiceDB、OpenFGA | Zanzibar準拠、関係性中心 | 概念理解に最適 |
+| **API中心** | Ory Keto | RESTful、シンプル | 実装が理解しやすい |
+| **ルール記述** | OPA | 宣言的、柔軟性高 | 応用範囲が広い |
+| **型安全** | Cedar | 構造化、コンパイル時チェック | 実用性が高い |
+
+#### 2.7.4 学習用実装における設計選択
+
+主要ライブラリの調査結果を踏まえ、学習用実装では以下を採用：
+
+**SpiceDB型の純粋なReBAC**
+- 関係性タプルによる表現
+- グラフ構造による推移的権限
+- BFSによる最短パス探索
+
+**実装の簡潔性**
+- TypeScriptによる型安全な実装
+- インメモリグラフによる高速アクセス
+- 学習に必要十分な機能に絞り込み
+
 学習用実装では、Zanzibarの本質的な概念に集中し、分散システムの複雑さは除外します。
 
-### 2.7 権限管理モデルの進化における位置づけ
+### 2.8 権限管理モデルの進化における位置づけ
 
 ```
 Unix → ACL → RBAC → ABAC → ReBAC
@@ -241,30 +364,173 @@ const PERMISSION_RULES: PermissionRule[] = [
 
 ### 3.6 Deny機能の扱い
 
-#### 3.6.1 ReBACにおけるDenyの位置づけ
+#### 3.6.1 ReBACにおけるDenyの根本的な考え方
 
-**従来モデルのDeny:**
-- ACL: 明示的なDenyエントリー
-- RBAC: 通常Denyなし（ポジティブモデル）
-- ABAC: DenyポリシーとPermitポリシー
+**従来モデルでのDenyアプローチ:**
+- **ACL**: 明示的なDenyエントリーでAllow/Denyを競合解決
+- **RBAC**: 通常Denyなし（ロールの加算的モデル）
+- **ABAC**: DenyポリシーとPermitポリシーでルール評価
 
-**ReBACでのアプローチ:**
+**ReBACにおけるDenyパラダイム:**
 
-**オプション1: Denyなし（Zanzibar型）**
-- 関係があれば許可、なければ拒否
-- シンプルで理解しやすい
+ReBACでは関係性ベースの権限モデルのため、従来の「明示的拒否」とは異なるアプローチを取ります。
 
-**オプション2: 否定的関係（採用）**
-```typescript
-type RelationType = 'owns' | 'manages' | 'blocked' | 'restricted'
-// blockedやrestrictedは否定的な関係
+#### 3.6.2 主要ReBACシステムのDenyサポート状況
+
+**Denyを直接サポートしないシステム** ❌
+
+**Google Zanzibar** - Pure ReBAC
 ```
-- 利点：より現実的なモデリング
-- 欠点：権限評価の複雑化
+// 関係があれば許可、なければ拒否の単純なモデル
+Check(user:alice, edit, doc:readme) → ALLOWED/DENIED
+```
+- **Default Denyパターン**: 関係性が存在しなければ自動的に拒否
+- **推移的許可**: 関係の連鎖があれば許可
+- **シンプルさ**: 明示的な拒否ルールは存在しない
 
-**学習用実装での扱い:**
-- 基本実装ではDenyなし（シンプルさ優先）
-- 発展課題として否定的関係を追加可能
+**SpiceDB** - Zanzibar準拠
+```
+definition document {
+  relation owner: user
+  permission edit = owner  // 所有者のみ許可、他は自動的に拒否
+}
+```
+- Zanzibarと同様のポジティブモデル
+- 関係性の有無で自動的に許可/拒否が決定
+
+**限定的にDenyをサポート** ✅
+
+**OpenFGA** - 条件付きでDenyサポート
+```json
+{
+  "type": "document",
+  "relations": {
+    "blocked_user": { "this": {} },
+    "can_view": {
+      "difference": {
+        "base": { "computedUserset": { "relation": "viewer" } },
+        "subtract": { "computedUserset": { "relation": "blocked_user" } }
+      }
+    }
+  }
+}
+```
+- `difference`演算子により「除外」を表現
+- 基本権限から特定の関係を差し引く
+
+**Ory Keto** - 否定的関係の実験的サポート
+```
+// 否定的な関係性
+PUT /relation-tuples
+{
+  "namespace": "access",
+  "object": "sensitive-doc",
+  "relation": "blocked",
+  "subject_id": "alice"
+}
+```
+- 特定の関係タイプを否定的として扱う
+- 実装は実験的段階
+
+#### 3.6.3 なぜReBACではDenyが複雑か
+
+**1. グラフ探索との競合**
+```typescript
+// 複雑な評価が必要
+// alice → team → document (許可パス)
+// alice → blocked → document (拒否パス)
+// どちらを優先する？
+```
+
+**2. 推移的関係での矛盾**
+```typescript
+// Aliceはチームを管理し、チームがドキュメントを所有
+// しかしAliceは個別にそのドキュメントへのアクセスをブロックされている
+// この矛盾をどう解決する？
+```
+
+**3. 性能への影響**
+- 許可パスと拒否パスの両方を探索する必要
+- グラフ探索の複雑度が増加
+- キャッシュ戦略の複雑化
+
+#### 3.6.4 学習用実装における設計決定
+
+**採用方針: 段階的な学習アプローチ**
+
+**Phase 1: Deny無し（Zanzibar型）- 基本実装**
+```typescript
+// シンプルなポジティブモデル
+type RelationType = 'owns' | 'manages' | 'memberOf' | 'viewer' | 'editor'
+```
+
+**理由:**
+1. **概念の純粋性**: ReBACの本質（関係性ベースの権限導出）に集中
+2. **実装の単純性**: グラフ探索アルゴリズムが直感的
+3. **デバッグの容易さ**: 権限の根拠（関係パス）が明確
+4. **Zanzibar準拠**: 業界標準のアプローチを学習
+
+**Phase 2: 否定的関係（発展課題）**
+```typescript
+// 将来的な拡張
+type RelationType = 
+  | 'owns' | 'manages' | 'memberOf' | 'viewer' | 'editor'  // ポジティブ
+  | 'blocked' | 'restricted' | 'suspended'              // ネガティブ
+```
+
+**Phase 3: ハイブリッドアプローチ（上級課題）**
+```typescript
+// ABAC的な条件との組み合わせ
+interface ConditionalRelation extends RelationTuple {
+  condition?: (context: Context) => boolean
+  priority?: number  // 競合解決のための優先度
+}
+```
+
+#### 3.6.5 実世界でのDenyのモデリング手法
+
+**手法1: 関係の削除**
+```typescript
+// 権限を取り消す場合は関係を削除
+graph.removeRelation({ subject: 'alice', relation: 'editor', object: 'doc' })
+```
+
+**手法2: 条件付き関係（将来実装）**
+```typescript
+// 時間制限付きの関係
+const conditionalRelation = {
+  subject: 'alice',
+  relation: 'editor',
+  object: 'doc',
+  validUntil: new Date('2024-12-31')
+}
+```
+
+**手法3: グループベースの除外**
+```typescript
+// 特定グループからの除外
+graph.addRelation({ subject: 'alice', relation: 'memberOf', object: 'editors' })
+graph.removeRelation({ subject: 'alice', relation: 'memberOf', object: 'editors' })
+// 個別の権限付与に移行
+graph.addRelation({ subject: 'alice', relation: 'viewer', object: 'doc' })
+```
+
+#### 3.6.6 学習効果の観点
+
+**Denyなし設計の教育価値:**
+
+1. **ReBACの本質理解**: 関係性による権限導出のメカニズムに集中
+2. **グラフ理論の学習**: BFS/DFS、最短パス探索の純粋な適用
+3. **Zanzibarとの整合性**: 実際の大規模システムとの対応
+4. **段階的な学習**: 基本概念の習得後、高度な機能に進む
+
+**将来的なDeny学習への準備:**
+- 基本実装の完全な理解
+- グラフ探索アルゴリズムの習熟
+- 競合解決戦略の概念理解
+- 実システムでの複雑性への準備
+
+この段階的アプローチにより、ReBACの核心概念をしっかりと理解した上で、より複雑な権限管理の課題に取り組むことができます。
 
 ### 3.7 循環参照の検出
 
@@ -986,68 +1252,782 @@ const detectCycle = () => {
 }
 ```
 
+### 7.6 ACL・RBAC・ABACとの比較例
+
+#### 7.6.1 同一シナリオでの実装比較
+
+**シナリオ**: エンジニアリング部門のAliceが、財務部門のBobが作成したドキュメントにアクセスしたい
+
+**ACLの場合（個別権限設定）**
+```typescript
+// 各ドキュメントで個別に権限を設定
+const financialDoc = new AclProtectedResource('budget-2024.xlsx')
+financialDoc.addEntry({
+  type: 'allow',
+  subject: { type: 'user', name: 'alice' },
+  permissions: { read: true, write: false }  // 個別に設定
+})
+// → 管理コスト: O(ユーザー数 × リソース数)
+```
+
+**RBACの場合（ロール経由）**
+```typescript
+// ロールベースの権限管理
+const roleManager = new RoleManager(ROLES)
+roleManager.assignRole('alice', 'cross-department-viewer')  // 横断閲覧ロール
+const financialDoc = new RbacProtectedResource('budget-2024.xlsx', roleManager)
+const result = financialDoc.authorize('alice', 'read')
+// → 管理コスト: O(ユーザー数 + ロール数)
+```
+
+**ABACの場合（属性評価）**
+```typescript
+// 属性とポリシーによる動的評価
+const crossDepartmentPolicy: PolicyRule = {
+  id: 'cross-dept-read',
+  effect: 'permit',
+  condition: (ctx) => {
+    return ctx.subject.clearanceLevel >= 3 &&
+           ctx.environment.location === 'office' &&
+           ctx.environment.currentTime.getHours() >= 9
+  }
+}
+// → 管理コスト: O(ポリシー数)、動的評価
+```
+
+**ReBACの場合（関係性ベース）**
+```typescript
+// 関係性による権限導出
+// Alice は Tech Lead として、Bob と協力関係にある
+graph.addRelation({ subject: 'alice', relation: 'collaboratesWith', object: 'bob' })
+graph.addRelation({ subject: 'bob', relation: 'owns', object: 'budget-2024.xlsx' })
+graph.addRelation({ subject: 'alice', relation: 'memberOf', object: 'tech-leads' })
+graph.addRelation({ subject: 'tech-leads', relation: 'viewer', object: 'financial-docs' })
+
+const result = document.checkRelation('alice', 'read')
+// → 関係性パスを探索して権限を導出
+// → 管理コスト: O(関係性数)、推移的導出
+```
+
+#### 7.6.2 管理性の比較
+
+| 権限モデル | 新規ユーザー追加 | 権限変更の影響範囲 | 組織変更への対応 |
+|-----------|-----------------|-------------------|-----------------|
+| **ACL** | 各リソースで個別設定 | 単一リソースのみ | 全リソースを個別更新 |
+| **RBAC** | ロール割り当てのみ | 全ユーザーに即座に反映 | ロール定義の更新のみ |
+| **ABAC** | 属性設定のみ | ポリシー変更で全体に反映 | 属性やポリシーの更新 |
+| **ReBAC** | 関係性設定のみ | 関係性変更で推移的に反映 | グラフ構造の更新 |
+
+#### 7.6.3 表現力の比較例
+
+**複雑な組織構造のモデリング**
+
+```typescript
+// 実世界の複雑な関係をReBACで表現
+class ComplexOrganizationExample {
+  setupRealWorldStructure() {
+    // 正式な組織階層
+    graph.addRelation({ subject: 'alice', relation: 'reports-to', object: 'cto' })
+    graph.addRelation({ subject: 'bob', relation: 'reports-to', object: 'cfo' })
+    
+    // プロジェクトベースの協力関係
+    graph.addRelation({ subject: 'alice', relation: 'project-lead', object: 'ai-initiative' })
+    graph.addRelation({ subject: 'bob', relation: 'finance-contact', object: 'ai-initiative' })
+    
+    // 一時的な委譲関係
+    graph.addRelation({ subject: 'charlie', relation: 'temporary-substitute', object: 'alice' })
+    
+    // メンタリング関係
+    graph.addRelation({ subject: 'alice', relation: 'mentors', object: 'junior-dev' })
+  }
+  
+  // このような複雑な関係をACL/RBACで表現するには
+  // 大量のエントリーやロールが必要
+  demonstrateComplexity() {
+    // ReBACでは自然に表現される関係が
+    // 他のモデルでは人工的な設計が必要
+    
+    // 例：「Aliceのメンタリングを受けている人は、
+    //      Aliceがアクセスできるドキュメントの一部にアクセス可能」
+    // → ReBACでは関係性の連鎖で自然に表現
+    // → RBACでは複雑なロール設計が必要
+    // → ACLでは大量のエントリーが必要
+  }
+}
+```
+
+### 7.7 段階的学習のシナリオ例
+
+#### 7.7.1 Phase 1: 直接関係のみ（深度1）
+
+```typescript
+// 最も基本的な関係性
+class DirectRelationExample {
+  setupBasicRelations() {
+    // 所有関係（直接）
+    graph.addRelation({ subject: 'alice', relation: 'owns', object: 'alice-notes.md' })
+    
+    // 編集権限（直接）
+    graph.addRelation({ subject: 'bob', relation: 'editor', object: 'shared-doc.md' })
+    
+    // 閲覧権限（直接）
+    graph.addRelation({ subject: 'charlie', relation: 'viewer', object: 'public-doc.md' })
+  }
+  
+  testDirectAccess() {
+    // 直接関係のみをテスト（1ホップ）
+    const aliceResult = document.checkRelation('alice', 'write')
+    // パス: [alice owns alice-notes.md] - 深度1
+    
+    const bobResult = document.checkRelation('bob', 'write')
+    // パス: [bob editor shared-doc.md] - 深度1
+  }
+}
+```
+
+#### 7.7.2 Phase 2: 間接関係（深度2-3）
+
+```typescript
+// チームを介した関係性
+class IndirectRelationExample {
+  setupTeamStructure() {
+    // チームメンバーシップ
+    graph.addRelation({ subject: 'alice', relation: 'memberOf', object: 'dev-team' })
+    graph.addRelation({ subject: 'bob', relation: 'memberOf', object: 'dev-team' })
+    
+    // チームの権限
+    graph.addRelation({ subject: 'dev-team', relation: 'editor', object: 'team-docs' })
+    
+    // チーム管理
+    graph.addRelation({ subject: 'tech-lead', relation: 'manages', object: 'dev-team' })
+    graph.addRelation({ subject: 'charlie', relation: 'memberOf', object: 'tech-lead' })
+  }
+  
+  testIndirectAccess() {
+    // 間接関係をテスト（2-3ホップ）
+    const aliceResult = document.checkRelation('alice', 'write')
+    // パス: [alice memberOf dev-team, dev-team editor team-docs] - 深度2
+    
+    const charlieResult = document.checkRelation('charlie', 'write')
+    // パス: [charlie memberOf tech-lead, tech-lead manages dev-team, dev-team editor team-docs] - 深度3
+  }
+}
+```
+
+#### 7.7.3 Phase 3: 複雑な組織構造
+
+```typescript
+// 現実的な組織の複雑さ
+class ComplexOrganizationExample {
+  setupMatrixOrganization() {
+    // 機能別組織
+    graph.addRelation({ subject: 'alice', relation: 'memberOf', object: 'engineering' })
+    graph.addRelation({ subject: 'bob', relation: 'memberOf', object: 'product' })
+    
+    // プロジェクト横断チーム
+    graph.addRelation({ subject: 'alice', relation: 'assignedTo', object: 'mobile-project' })
+    graph.addRelation({ subject: 'bob', relation: 'assignedTo', object: 'mobile-project' })
+    
+    // プロジェクト固有の権限
+    graph.addRelation({ subject: 'mobile-project', relation: 'editor', object: 'mobile-specs' })
+    
+    // 外部コントラクター
+    graph.addRelation({ subject: 'contractor', relation: 'temporaryAccessTo', object: 'mobile-project' })
+  }
+  
+  testComplexScenarios() {
+    // 複雑な権限導出
+    const contractorResult = document.checkRelation('contractor', 'read')
+    // パス: [contractor temporaryAccessTo mobile-project, mobile-project editor mobile-specs]
+    
+    // マトリックス組織での横断アクセス
+    const crossFunctionalAccess = document.checkRelation('alice', 'write')
+    // パス: [alice assignedTo mobile-project, mobile-project editor mobile-specs]
+  }
+}
+```
+
+### 7.8 性能とスケーラビリティの実例
+
+#### 7.8.1 グラフサイズによる性能測定
+
+```typescript
+class PerformanceExample {
+  measureScalability() {
+    // 小規模グラフ（100ノード、500エッジ）
+    const smallGraph = this.generateGraph(100, 500)
+    const smallTime = this.measureSearchTime(smallGraph, 'alice', 'document1')
+    // 期待値: < 1ms
+    
+    // 中規模グラフ（1000ノード、5000エッジ）
+    const mediumGraph = this.generateGraph(1000, 5000)
+    const mediumTime = this.measureSearchTime(mediumGraph, 'alice', 'document1')
+    // 期待値: < 10ms
+    
+    // 大規模グラフ（10000ノード、50000エッジ）
+    const largeGraph = this.generateGraph(10000, 50000)
+    const largeTime = this.measureSearchTime(largeGraph, 'alice', 'document1')
+    // 期待値: < 100ms（最適化が必要なレベル）
+  }
+  
+  demonstrateOptimizations() {
+    // 深度制限による最適化
+    const config = { maxDepth: 3 }  // 3ホップまでに制限
+    const result = explorer.findRelationPath('alice', 'document1', config)
+    
+    // インデックスによる最適化
+    const indexedResult = graph.getRelations('alice', 'manages')  // O(1)アクセス
+    
+    // キャッシュによる最適化（将来実装）
+    const cachedResult = explorerWithCache.findRelationPath('alice', 'document1')
+  }
+}
+```
+
+#### 7.8.2 メモリ使用量の分析
+
+```typescript
+class MemoryAnalysisExample {
+  analyzeMemoryUsage() {
+    // 隣接リスト実装のメモリ効率
+    const adjacencyListMemory = this.calculateMemoryUsage('adjacencyList')
+    // 期待値: O(V + E) where V=ノード数, E=エッジ数
+    
+    // 隣接行列との比較
+    const adjacencyMatrixMemory = this.calculateMemoryUsage('adjacencyMatrix')
+    // 期待値: O(V²) - スパースグラフでは非効率
+    
+    console.log(`隣接リスト: ${adjacencyListMemory}MB`)
+    console.log(`隣接行列: ${adjacencyMatrixMemory}MB`)
+    // スパースなグラフでは隣接リストが圧倒的に効率的
+  }
+}
+```
+
 ## 8. テスト戦略
 
 ### 8.1 単体テスト
 
-必須のテストケース：
+#### 8.1.1 基本的な関係性テスト
 
-1. **基本的な関係性テスト**
-   - 直接関係の追加・削除
-   - 関係の存在確認
-   - 逆方向の索引
+```typescript
+describe('RelationGraph', () => {
+  test('直接関係の追加と検証', () => {
+    const graph = new RelationGraph()
+    
+    // 関係の追加
+    graph.addRelation({ subject: 'alice', relation: 'owns', object: 'doc1' })
+    
+    // 存在確認
+    expect(graph.hasDirectRelation('alice', 'owns', 'doc1')).toBe(true)
+    expect(graph.hasDirectRelation('alice', 'owns', 'doc2')).toBe(false)
+    
+    // 逆方向索引の確認
+    const reverseRelations = graph.getReverseRelations('doc1', 'owns')
+    expect(reverseRelations).toContain({ subject: 'alice', relation: 'owns', object: 'doc1' })
+  })
+  
+  test('関係の削除', () => {
+    const graph = new RelationGraph()
+    graph.addRelation({ subject: 'alice', relation: 'owns', object: 'doc1' })
+    
+    // 削除前の確認
+    expect(graph.hasDirectRelation('alice', 'owns', 'doc1')).toBe(true)
+    
+    // 削除
+    graph.removeRelation({ subject: 'alice', relation: 'owns', object: 'doc1' })
+    
+    // 削除後の確認
+    expect(graph.hasDirectRelation('alice', 'owns', 'doc1')).toBe(false)
+  })
+})
+```
 
-2. **探索アルゴリズムテスト**
-   - 1ホップの直接関係
-   - 2-3ホップの推移的関係
-   - 最短パスの発見
-   - 循環の検出と回避
+#### 8.1.2 探索アルゴリズムテスト
 
-3. **権限評価テスト**
-   - 各関係タイプでの権限チェック
-   - 複数の関係パスがある場合
-   - 関係が存在しない場合
+```typescript
+describe('RelationshipExplorer', () => {
+  test('1ホップの直接関係探索', () => {
+    const graph = new RelationGraph()
+    graph.addRelation({ subject: 'alice', relation: 'owns', object: 'doc1' })
+    
+    const explorer = new RelationshipExplorer(graph)
+    const path = explorer.findRelationPath('alice', 'doc1')
+    
+    expect(path).toEqual([
+      { subject: 'alice', relation: 'owns', object: 'doc1' }
+    ])
+  })
+  
+  test('2ホップの推移的関係探索', () => {
+    const graph = new RelationGraph()
+    graph.addRelation({ subject: 'alice', relation: 'memberOf', object: 'team' })
+    graph.addRelation({ subject: 'team', relation: 'editor', object: 'doc1' })
+    
+    const explorer = new RelationshipExplorer(graph)
+    const path = explorer.findRelationPath('alice', 'doc1')
+    
+    expect(path).toEqual([
+      { subject: 'alice', relation: 'memberOf', object: 'team' },
+      { subject: 'team', relation: 'editor', object: 'doc1' }
+    ])
+    expect(path.length).toBe(2)  // 2ホップ
+  })
+  
+  test('最短パスの発見', () => {
+    const graph = new RelationGraph()
+    // 複数経路を設定
+    // 経路1: alice -> team -> doc1 (2ホップ)
+    graph.addRelation({ subject: 'alice', relation: 'memberOf', object: 'team' })
+    graph.addRelation({ subject: 'team', relation: 'editor', object: 'doc1' })
+    
+    // 経路2: alice -> manager -> team -> doc1 (3ホップ)
+    graph.addRelation({ subject: 'alice', relation: 'reportsTo', object: 'manager' })
+    graph.addRelation({ subject: 'manager', relation: 'manages', object: 'team' })
+    
+    const explorer = new RelationshipExplorer(graph)
+    const path = explorer.findRelationPath('alice', 'doc1')
+    
+    // BFSにより最短パス（2ホップ）が発見される
+    expect(path.length).toBe(2)
+  })
+  
+  test('循環の検出と回避', () => {
+    const graph = new RelationGraph()
+    // 循環を作成: A -> B -> C -> A
+    graph.addRelation({ subject: 'A', relation: 'manages', object: 'B' })
+    graph.addRelation({ subject: 'B', relation: 'manages', object: 'C' })
+    graph.addRelation({ subject: 'C', relation: 'manages', object: 'A' })
+    
+    const explorer = new RelationshipExplorer(graph)
+    
+    // 循環があっても無限ループしない
+    const path = explorer.findRelationPath('A', 'nonexistent')
+    expect(path).toBeNull()  // パスが見つからない
+  })
+  
+  test('深度制限の動作', () => {
+    const graph = new RelationGraph()
+    // 4ホップの長い経路を作成
+    graph.addRelation({ subject: 'alice', relation: 'memberOf', object: 'team1' })
+    graph.addRelation({ subject: 'team1', relation: 'partOf', object: 'dept1' })
+    graph.addRelation({ subject: 'dept1', relation: 'partOf', object: 'company' })
+    graph.addRelation({ subject: 'company', relation: 'owns', object: 'doc1' })
+    
+    const explorer = new RelationshipExplorer(graph, { maxDepth: 3 })
+    const path = explorer.findRelationPath('alice', 'doc1')
+    
+    // 深度制限により見つからない
+    expect(path).toBeNull()
+  })
+})
+```
 
-4. **境界値テスト**
-   - 最大深度での探索
-   - 空のグラフ
-   - 大規模グラフ（性能テスト）
+#### 8.1.3 権限評価テスト
+
+```typescript
+describe('ReBACProtectedResource', () => {
+  test('所有者の直接アクセス', () => {
+    const graph = new RelationGraph()
+    graph.addRelation({ subject: 'alice', relation: 'owns', object: 'doc1' })
+    
+    const resource = new ReBACProtectedResource('doc1', graph, PERMISSION_RULES)
+    const result = resource.checkRelation('alice', 'write')
+    
+    expect(result.type).toBe('granted')
+    expect(result.path).toEqual([
+      { subject: 'alice', relation: 'owns', object: 'doc1' }
+    ])
+  })
+  
+  test('関係性が存在しない場合の拒否', () => {
+    const graph = new RelationGraph()
+    const resource = new ReBACProtectedResource('doc1', graph, PERMISSION_RULES)
+    const result = resource.checkRelation('alice', 'write')
+    
+    expect(result.type).toBe('denied')
+    expect(result.reason).toBe('no-relation')
+  })
+  
+  test('複数の関係パスがある場合の処理', () => {
+    const graph = new RelationGraph()
+    // 複数の経路でアクセス可能
+    graph.addRelation({ subject: 'alice', relation: 'owns', object: 'doc1' })  // 直接所有
+    graph.addRelation({ subject: 'alice', relation: 'memberOf', object: 'team' })
+    graph.addRelation({ subject: 'team', relation: 'editor', object: 'doc1' })  // チーム経由
+    
+    const resource = new ReBACProtectedResource('doc1', graph, PERMISSION_RULES)
+    const result = resource.checkRelation('alice', 'write')
+    
+    expect(result.type).toBe('granted')
+    // 最初に見つかった（最短の）パスが返される
+    expect(result.path.length).toBe(1)  // 直接所有パス
+  })
+})
+```
 
 ### 8.2 統合テスト
 
-シナリオベースのテスト：
+#### 8.2.1 実世界シナリオのテスト
 
-1. **組織構造のモデリング**
-   - 階層的な管理構造
-   - マトリックス組織
-   - プロジェクトベースのチーム
+```typescript
+describe('Real-world Scenarios', () => {
+  test('組織変更シナリオ：チーム再編成', () => {
+    const graph = new RelationGraph()
+    
+    // 初期状態：Aliceはチーム1のメンバー
+    graph.addRelation({ subject: 'alice', relation: 'memberOf', object: 'team1' })
+    graph.addRelation({ subject: 'team1', relation: 'editor', object: 'project-docs' })
+    
+    const resource = new ReBACProtectedResource('project-docs', graph, PERMISSION_RULES)
+    
+    // 初期状態での権限確認
+    let result = resource.checkRelation('alice', 'write')
+    expect(result.type).toBe('granted')
+    
+    // 組織変更：Aliceがチーム2に異動
+    graph.removeRelation({ subject: 'alice', relation: 'memberOf', object: 'team1' })
+    graph.addRelation({ subject: 'alice', relation: 'memberOf', object: 'team2' })
+    
+    // チーム2には権限がない
+    result = resource.checkRelation('alice', 'write')
+    expect(result.type).toBe('denied')
+    
+    // チーム2に権限を付与
+    graph.addRelation({ subject: 'team2', relation: 'viewer', object: 'project-docs' })
+    
+    // 読み取りのみ可能
+    expect(resource.checkRelation('alice', 'read').type).toBe('granted')
+    expect(resource.checkRelation('alice', 'write').type).toBe('denied')
+  })
+  
+  test('一時的な権限委譲シナリオ', () => {
+    const graph = new RelationGraph()
+    
+    // 通常状態：BobがドキュメントのOwner
+    graph.addRelation({ subject: 'bob', relation: 'owns', object: 'sensitive-doc' })
+    
+    const resource = new ReBACProtectedResource('sensitive-doc', graph, PERMISSION_RULES)
+    
+    // Aliceは初期状態でアクセス不可
+    expect(resource.checkRelation('alice', 'read').type).toBe('denied')
+    
+    // 一時的な委譲：BobがAliceに権限を委譲
+    graph.addRelation({ subject: 'alice', relation: 'delegatedBy', object: 'bob' })
+    
+    // 委譲により間接的にアクセス可能
+    const result = resource.checkRelation('alice', 'read')
+    expect(result.type).toBe('granted')
+    expect(result.path.length).toBe(2)  // alice -> bob -> doc
+    
+    // 委譲取り消し
+    graph.removeRelation({ subject: 'alice', relation: 'delegatedBy', object: 'bob' })
+    
+    // 再びアクセス不可
+    expect(resource.checkRelation('alice', 'read').type).toBe('denied')
+  })
+  
+  test('マトリックス組織でのプロジェクト横断アクセス', () => {
+    const graph = new RelationGraph()
+    
+    // 機能組織での所属
+    graph.addRelation({ subject: 'alice', relation: 'memberOf', object: 'engineering' })
+    graph.addRelation({ subject: 'bob', relation: 'memberOf', object: 'design' })
+    
+    // プロジェクトチームへの参加
+    graph.addRelation({ subject: 'alice', relation: 'assignedTo', object: 'mobile-project' })
+    graph.addRelation({ subject: 'bob', relation: 'assignedTo', object: 'mobile-project' })
+    
+    // プロジェクト固有のリソース
+    graph.addRelation({ subject: 'mobile-project', relation: 'editor', object: 'mobile-specs' })
+    
+    const resource = new ReBACProtectedResource('mobile-specs', graph, PERMISSION_RULES)
+    
+    // 異なる部門でもプロジェクト経由でアクセス可能
+    expect(resource.checkRelation('alice', 'write').type).toBe('granted')
+    expect(resource.checkRelation('bob', 'write').type).toBe('granted')
+    
+    // プロジェクトから離脱
+    graph.removeRelation({ subject: 'alice', relation: 'assignedTo', object: 'mobile-project' })
+    
+    // アクセス不可になる
+    expect(resource.checkRelation('alice', 'write').type).toBe('denied')
+  })
+})
+```
 
-2. **権限の委譲と取り消し**
-   - 一時的な権限委譲
-   - 委譲の連鎖
-   - 委譲の取り消し
+#### 8.2.2 複雑な権限パターンのテスト
 
-3. **動的な組織変更**
-   - チームの再編成
-   - メンバーの異動
-   - 権限の昇格・降格
-
-4. **複雑なアクセスパターン**
-   - 複数経路での権限
-   - グループとの組み合わせ
-   - 否定的関係（将来実装）
+```typescript
+describe('Complex Permission Patterns', () => {
+  test('多層組織での権限継承', () => {
+    const graph = new RelationGraph()
+    
+    // 組織階層：Company -> Department -> Team -> Individual
+    graph.addRelation({ subject: 'alice', relation: 'memberOf', object: 'dev-team' })
+    graph.addRelation({ subject: 'dev-team', relation: 'partOf', object: 'engineering-dept' })
+    graph.addRelation({ subject: 'engineering-dept', relation: 'partOf', object: 'company' })
+    graph.addRelation({ subject: 'company', relation: 'owns', object: 'company-handbook' })
+    
+    const resource = new ReBACProtectedResource('company-handbook', graph, PERMISSION_RULES)
+    const result = resource.checkRelation('alice', 'read')
+    
+    // 4ホップの権限継承
+    expect(result.type).toBe('granted')
+    expect(result.path.length).toBe(4)
+  })
+  
+  test('権限の合流パターン', () => {
+    const graph = new RelationGraph()
+    
+    // 複数経路でのアクセス
+    // 経路1: alice -> admin-role -> doc
+    graph.addRelation({ subject: 'alice', relation: 'hasRole', object: 'admin' })
+    graph.addRelation({ subject: 'admin', relation: 'editor', object: 'shared-doc' })
+    
+    // 経路2: alice -> team -> doc
+    graph.addRelation({ subject: 'alice', relation: 'memberOf', object: 'core-team' })
+    graph.addRelation({ subject: 'core-team', relation: 'viewer', object: 'shared-doc' })
+    
+    const resource = new ReBACProtectedResource('shared-doc', graph, PERMISSION_RULES)
+    
+    // より強い権限（editor）が優先される
+    const writeResult = resource.checkRelation('alice', 'write')
+    expect(writeResult.type).toBe('granted')
+    expect(writeResult.relation).toBe('editor')  // admin経由での権限
+  })
+})
+```
 
 ### 8.3 性能テスト
 
-1. **スケーラビリティ**
-   - 1000ノード、10000エッジのグラフ
-   - 探索時間の測定
-   - メモリ使用量の監視
+#### 8.3.1 スケーラビリティテスト
 
-2. **最適化の検証**
-   - キャッシュの効果測定
-   - インデックスの有効性
-   - 並列探索（将来実装）
+```typescript
+describe('Performance and Scalability', () => {
+  test('大規模グラフでの探索性能', () => {
+    const graph = new RelationGraph()
+    
+    // 10,000ノード、50,000エッジのグラフを生成
+    const { nodes, edges } = generateLargeGraph(10000, 50000)
+    
+    // グラフにデータを投入
+    const startTime = performance.now()
+    edges.forEach(edge => graph.addRelation(edge))
+    const loadTime = performance.now() - startTime
+    
+    expect(loadTime).toBeLessThan(1000)  // 1秒以内での読み込み
+    
+    // 探索性能のテスト
+    const explorer = new RelationshipExplorer(graph)
+    const searchStart = performance.now()
+    const path = explorer.findRelationPath('user1', 'document1')
+    const searchTime = performance.now() - searchStart
+    
+    expect(searchTime).toBeLessThan(100)  // 100ms以内での探索
+  })
+  
+  test('深度制限による性能向上', () => {
+    const graph = new RelationGraph()
+    generateDeepGraph(graph, 1000, 20)  // 20層の深いグラフ
+    
+    const config1 = { maxDepth: 20 }  // 制限なし
+    const config2 = { maxDepth: 5 }   // 5層制限
+    
+    const explorer = new RelationshipExplorer(graph)
+    
+    // 制限なしの場合
+    const start1 = performance.now()
+    const result1 = explorer.findRelationPath('start', 'end', config1)
+    const time1 = performance.now() - start1
+    
+    // 制限ありの場合
+    const start2 = performance.now()
+    const result2 = explorer.findRelationPath('start', 'end', config2)
+    const time2 = performance.now() - start2
+    
+    // 制限により性能が向上
+    expect(time2).toBeLessThan(time1)
+  })
+  
+  test('メモリ使用量の測定', () => {
+    const graph = new RelationGraph()
+    
+    // メモリ使用量測定のヘルパー
+    const measureMemory = () => {
+      if (process.memoryUsage) {
+        return process.memoryUsage().heapUsed
+      }
+      return 0  // ブラウザ環境では概算
+    }
+    
+    const initialMemory = measureMemory()
+    
+    // 大量のデータを追加
+    for (let i = 0; i < 10000; i++) {
+      graph.addRelation({
+        subject: `user${i}`,
+        relation: 'memberOf',
+        object: `team${i % 100}`
+      })
+    }
+    
+    const finalMemory = measureMemory()
+    const memoryUsed = finalMemory - initialMemory
+    
+    // メモリ使用量が予想範囲内
+    expect(memoryUsed).toBeLessThan(50 * 1024 * 1024)  // 50MB以下
+  })
+})
+```
+
+#### 8.3.2 キャッシュとインデックスの効果測定
+
+```typescript
+describe('Optimization Effects', () => {
+  test('インデックスによる高速化', () => {
+    const graph = new RelationGraph()
+    
+    // 大量のデータを追加
+    for (let i = 0; i < 1000; i++) {
+      graph.addRelation({
+        subject: 'alice',
+        relation: 'memberOf',
+        object: `team${i}`
+      })
+    }
+    
+    // インデックスを使用した検索
+    const start = performance.now()
+    const relations = graph.getRelations('alice', 'memberOf')
+    const indexedTime = performance.now() - start
+    
+    expect(relations.length).toBe(1000)
+    expect(indexedTime).toBeLessThan(10)  // 10ms以下
+  })
+  
+  test('逆方向インデックスの効果', () => {
+    const graph = new RelationGraph()
+    
+    // 多くのユーザーが同じチームに所属
+    for (let i = 0; i < 1000; i++) {
+      graph.addRelation({
+        subject: `user${i}`,
+        relation: 'memberOf',
+        object: 'popular-team'
+      })
+    }
+    
+    // 逆方向検索（チームのメンバー一覧）
+    const start = performance.now()
+    const members = graph.getReverseRelations('popular-team', 'memberOf')
+    const reverseTime = performance.now() - start
+    
+    expect(members.length).toBe(1000)
+    expect(reverseTime).toBeLessThan(10)  // 10ms以下
+  })
+})
+```
+
+### 8.4 エラー処理とエッジケースのテスト
+
+```typescript
+describe('Error Handling and Edge Cases', () => {
+  test('存在しないエンティティでの探索', () => {
+    const graph = new RelationGraph()
+    const explorer = new RelationshipExplorer(graph)
+    
+    const path = explorer.findRelationPath('nonexistent', 'also-nonexistent')
+    expect(path).toBeNull()
+  })
+  
+  test('空のグラフでの操作', () => {
+    const graph = new RelationGraph()
+    const resource = new ReBACProtectedResource('doc1', graph, PERMISSION_RULES)
+    
+    const result = resource.checkRelation('alice', 'read')
+    expect(result.type).toBe('denied')
+    expect(result.reason).toBe('no-relation')
+  })
+  
+  test('自己参照の関係性', () => {
+    const graph = new RelationGraph()
+    
+    // 自分自身への関係（有効なケース）
+    graph.addRelation({ subject: 'alice', relation: 'owns', object: 'alice' })
+    
+    expect(graph.hasDirectRelation('alice', 'owns', 'alice')).toBe(true)
+  })
+  
+  test('重複関係の処理', () => {
+    const graph = new RelationGraph()
+    
+    // 同じ関係を複数回追加
+    const relation = { subject: 'alice', relation: 'owns', object: 'doc1' }
+    graph.addRelation(relation)
+    graph.addRelation(relation)  // 重複
+    
+    // 重複は無視され、1つだけ存在
+    const relations = graph.getRelations('alice', 'owns')
+    expect(relations.length).toBe(1)
+  })
+})
+```
+
+### 8.5 学習効果測定のためのテスト
+
+```typescript
+describe('Learning Effectiveness Tests', () => {
+  test('段階的学習の進捗確認', () => {
+    // Phase 1: 直接関係のみ
+    const phase1Graph = new RelationGraph()
+    phase1Graph.addRelation({ subject: 'alice', relation: 'owns', object: 'doc1' })
+    
+    const phase1Resource = new ReBACProtectedResource('doc1', phase1Graph, PERMISSION_RULES)
+    const phase1Result = phase1Resource.checkRelation('alice', 'write')
+    
+    expect(phase1Result.type).toBe('granted')
+    expect(phase1Result.path.length).toBe(1)  // 1ホップ
+    
+    // Phase 2: 間接関係
+    const phase2Graph = new RelationGraph()
+    phase2Graph.addRelation({ subject: 'alice', relation: 'memberOf', object: 'team' })
+    phase2Graph.addRelation({ subject: 'team', relation: 'editor', object: 'doc1' })
+    
+    const phase2Resource = new ReBACProtectedResource('doc1', phase2Graph, PERMISSION_RULES)
+    const phase2Result = phase2Resource.checkRelation('alice', 'write')
+    
+    expect(phase2Result.type).toBe('granted')
+    expect(phase2Result.path.length).toBe(2)  // 2ホップ
+  })
+  
+  test('権限管理モデル間の違いの理解確認', () => {
+    // ReBACの特徴：推移的権限の自動導出
+    const graph = new RelationGraph()
+    graph.addRelation({ subject: 'alice', relation: 'manages', object: 'team' })
+    graph.addRelation({ subject: 'bob', relation: 'memberOf', object: 'team' })
+    graph.addRelation({ subject: 'bob', relation: 'owns', object: 'doc1' })
+    
+    const resource = new ReBACProtectedResource('doc1', graph, PERMISSION_RULES)
+    const result = resource.checkRelation('alice', 'write')
+    
+    // Aliceは直接的な権限設定なしに、関係性の連鎖でアクセス可能
+    expect(result.type).toBe('granted')
+    expect(result.path.length).toBe(3)  // 推移的な関係
+    
+    // これはRBAC/ABACでは明示的な設定が必要な権限
+    // ReBACでは関係性から自動的に導出される
+  })
+})
+```
+
+この拡充されたテスト戦略により、学習者は以下を体験できます：
+
+1. **段階的な理解の確認**: 基本から複雑なケースまでの理解度測定
+2. **実世界シナリオの体験**: 組織変更や権限委譲などの現実的な状況
+3. **性能特性の理解**: グラフ探索の計算量や最適化の効果
+4. **他モデルとの比較**: ReBACの特徴と利点の実感
+5. **エラー処理の重要性**: 堅牢なシステム設計の理解
 
 ## 9. 参考情報
 
