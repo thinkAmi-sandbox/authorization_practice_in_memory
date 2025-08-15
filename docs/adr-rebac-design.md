@@ -2029,6 +2029,200 @@ describe('Learning Effectiveness Tests', () => {
 4. **他モデルとの比較**: ReBACの特徴と利点の実感
 5. **エラー処理の重要性**: 堅牢なシステム設計の理解
 
+### 8.6 学習効率重視のユニットテスト戦略（採用方針）
+
+#### 8.6.1 設計方針の見直し
+
+**従来のテスト戦略からの変更点:**
+
+上記8.1-8.5の包括的なテスト戦略は教育的価値が高いものの、学習効率の観点から以下の点を見直しました：
+
+1. **統合テストの除外**: 実世界シナリオや複雑な権限パターンのテストは学習の範囲外
+2. **性能テストの除外**: 初期学習では理論理解を優先し、性能最適化は後回し
+3. **権限別テストの簡潔化**: 読み取り権限と書き込み権限の本質的違いに着目
+
+#### 8.6.2 権限による違いの分析
+
+**読み取り権限 vs 書き込み権限:**
+
+```typescript
+// 権限ルールの比較
+const PERMISSION_RULES = [
+  { relation: 'owns', permissions: { read: true, write: true } },
+  { relation: 'manages', permissions: { read: true, write: true } },
+  { relation: 'editor', permissions: { read: true, write: true } },
+  { relation: 'viewer', permissions: { read: true, write: false } }  // 唯一の違い
+]
+```
+
+**分析結果:**
+- 共通ロジック: グラフ探索アルゴリズム（BFS）、最短パス探索、循環検出、深度制限
+- 実質的違い: viewer関係での書き込み拒否のみ
+- 学習価値: 書き込み権限のテストで関係性による権限の違いも学習可能
+
+#### 8.6.3 境界値テストの適用可否
+
+**ReBACにおける境界値テストの特徴:**
+
+従来の権限モデルとの根本的違い：
+
+| モデル | 評価対象 | 境界値テストの適用性 |
+|--------|----------|-------------------|
+| **ABAC** | 数値属性（clearanceLevel ≥ 3） | ✅ 有効（2,3,4での動作確認） |
+| **ABAC** | 時間属性（9:00-17:00） | ✅ 有効（08:59:59, 09:00:00, 17:00:01） |
+| **ReBAC** | 関係の有無（owns/editor/viewer） | ❌ 離散的（存在するか、しないか） |
+| **ReBAC** | 深度制限（maxDepth=3） | △ 限定的（整数値の境界のみ） |
+
+**ReBACでは境界値テストが不適用な理由:**
+1. **離散的な関係**: 「半分owns」や「0.7 manages」のような中間値は存在しない
+2. **グラフ構造**: エッジの存在/非存在の2値的評価
+3. **整数深度**: 1ホップ、2ホップ（1.5ホップは存在しない）
+
+#### 8.6.4 採用するユニットテスト構造
+
+**書き込み権限に焦点を当てた効率的なテスト:**
+
+```typescript
+describe('ReBAC (Relationship-Based Access Control)', () => {
+  // 1. RelationGraphクラス（約150行）
+  describe('RelationGraph', () => {
+    describe('addRelation', () => {
+      it('関係を追加できること')
+      it('同じ関係を重複追加しても1つとして扱われること')
+    })
+    describe('removeRelation', () => {
+      it('存在する関係を削除できること')
+    })
+    describe('hasDirectRelation', () => {
+      it('存在する直接関係に対してtrueを返すこと')
+      it('存在しない関係に対してfalseを返すこと')
+    })
+    describe('getRelations', () => {
+      it('指定したsubjectの全関係を取得できること')
+      it('関係タイプで絞り込めること')
+    })
+  })
+
+  // 2. RelationshipExplorerクラス（約300行）
+  describe('RelationshipExplorer', () => {
+    describe('findRelationPath', () => {
+      describe('基本的な探索', () => {
+        it('直接関係（1ホップ）のパスを返すこと')
+        it('間接関係（2ホップ）のパスを返すこと')
+        it('間接関係（3ホップ）のパスを返すこと')
+        it('関係が存在しない場合nullを返すこと')
+      })
+      describe('最短パス保証', () => {
+        it('複数パスが存在する場合、最短パスを返すこと')
+      })
+      describe('深度制限', () => {
+        it('maxDepth内で見つかればパスを返すこと')
+        it('maxDepthを超える場合nullを返すこと')
+      })
+      describe('循環参照', () => {
+        it('循環があっても無限ループしないこと')
+      })
+    })
+  })
+
+  // 3. ReBACProtectedResourceクラス（約400行）
+  describe('ReBACProtectedResource', () => {
+    describe('checkRelation (write権限)', () => {
+      describe('関係性なし', () => {
+        it('deniedを返し、reasonがno-relationであること')
+      })
+      describe('直接関係', () => {
+        it('owns関係で書き込み可能')
+        it('editor関係で書き込み可能')
+        it('viewer関係で書き込み不可（権限の違いを学習）')
+      })
+      describe('推移的な権限導出', () => {
+        it('ユーザー→チーム→ドキュメントで書き込み可能')
+        it('マネージャー→チーム→メンバー→ドキュメントで書き込み可能')
+        it('パスの各ステップが正しく記録されること')
+      })
+      describe('深度制限の影響', () => {
+        it('深度制限を超える場合、max-depth-exceededで拒否')
+      })
+    })
+    describe('getRequiredRelations', () => {
+      it('writeアクションに必要な関係タイプを返すこと')
+    })
+  })
+})
+```
+
+#### 8.6.5 学習効果を最大化する要素
+
+**1. 段階的な複雑性**
+- 深度1（直接関係）→ 深度2（チーム経由）→ 深度3（管理関係）
+- 単一関係 → 複数パス → 複雑な組織構造
+
+**2. 具体的なパス可視化**
+```typescript
+expect(result).toEqual({
+  type: 'granted',
+  path: [
+    { subject: 'alice', relation: 'manages', object: 'dev-team' },
+    { subject: 'bob', relation: 'memberOf', object: 'dev-team' },
+    { subject: 'bob', relation: 'owns', object: 'document' }
+  ],
+  relation: 'manages'
+})
+// → 権限の根拠となる関係性の連鎖を明確に理解
+```
+
+**3. 権限の違いを明示**
+```typescript
+describe('viewer関係での制限', () => {
+  it('viewer関係では書き込み不可')
+  // → owns/editor/managesとviewerの権限差を理解
+})
+```
+
+#### 8.6.6 テストコードの構成要素
+
+**ヘルパー関数（約100行）:**
+```typescript
+// グラフ構築ヘルパー
+function createSimpleGraph(): RelationGraph
+function createTeamGraph(): RelationGraph  
+function createManagerialGraph(): RelationGraph
+function createCyclicGraph(): RelationGraph
+
+// デフォルト権限ルール
+const DEFAULT_PERMISSION_RULES = [
+  { relation: 'owns', permissions: { read: true, write: true }, description: '所有者' },
+  { relation: 'manages', permissions: { read: true, write: true }, description: '管理者' },
+  { relation: 'editor', permissions: { read: true, write: true }, description: '編集者' },
+  { relation: 'viewer', permissions: { read: true, write: false }, description: '閲覧者' }
+]
+```
+
+**合計行数: 約950行**
+- RelationGraph: 150行
+- RelationshipExplorer: 300行  
+- ReBACProtectedResource: 400行
+- ヘルパー関数: 100行
+
+#### 8.6.7 学習効率向上のメリット
+
+**1. 重複の排除**
+- 読み取り/書き込み権限の本質的に同じロジックの重複テストを回避
+- viewer関係での違いに焦点を当てることで権限概念を効率的に学習
+
+**2. 核心概念への集中**
+- グラフ探索（BFS）の理解
+- 推移的権限導出の仕組み
+- 関係性による権限の違い（owns/editor vs viewer）
+
+**3. 実践的な価値**
+- 他の権限モデルとの本質的違いを理解
+- 境界値テストが適用されない理由の理解
+- ReBACの離散的・構造的特徴の体験
+
+この学習効率重視のアプローチにより、ReBACの本質を短時間で確実に理解できる構成となっています。
+
 ## 9. 参考情報
 
 ### 9.1 ReBAC関連の文献
