@@ -29,6 +29,45 @@ ReBACの基本要素は `(subject, relation, object)` の3つ組：
 }
 ```
 
+#### タプル命名の業界標準
+
+**現在の標準**: `(subject, relation, object)`
+
+**歴史的変遷:**
+```typescript
+// Google Zanzibar (2016年)
+(user, relation, object)
+
+// 現在の業界標準 (2018年以降)
+(subject, relation, object)
+```
+
+**なぜ`user`から`subject`へ変化したのか:**
+
+| 命名 | 対象範囲 | 例 |
+|------|---------|---|
+| `user` | 人間のユーザーのみ | alice, bob |
+| `subject` | 任意の主体 | alice, team, service-account, role |
+
+```typescript
+// subjectの汎用性
+alice --owns--> document        // ユーザー
+team --owns--> document         // チーム
+service-account --owns--> api   // サービス
+role --grants--> permission     // ロール
+```
+
+**主要ReBACシステムの命名:**
+
+| システム | 命名パターン | 特徴 |
+|---------|-------------|------|
+| **Google Zanzibar** | `(user, relation, object)` | 初期実装、現在は内部で`subject`化 |
+| **SpiceDB** | `(subject, relation, resource)` | Zanzibar準拠、`object`→`resource` |
+| **OpenFGA** | `(user, relation, object)` | APIレベルでは`user`、内部は`subject` |
+| **Ory Keto** | `(subject_id, relation, object)` | 明示的に`subject_id` |
+
+**`relation`は全システムで共通** - 関係の種類を表す概念に違いはない
+
 #### 2. グラフ構造
 関係性タプルがグラフを形成：
 ```
@@ -44,6 +83,52 @@ alice manages dev-team AND
 bob memberOf dev-team AND 
 bob owns document1
 → alice can access document1 (管理権限による)
+```
+
+#### 4. 関係性のカテゴリ化と設計
+
+**一般的な関係性の分類（実装依存）:**
+
+今回の学習用実装では、関係性を2つのカテゴリに分類：
+
+##### (a) リソース直接関係
+リソースに対する直接的な権限：
+```typescript
+alice --owns--> document1      // 所有者
+bob --editor--> document1      // 編集者
+charlie --viewer--> document1  // 閲覧者
+```
+
+##### (b) エンティティ間関係
+組織構造や協力関係：
+```typescript
+alice --manages--> dev-team     // 管理関係
+bob --memberOf--> dev-team      // 所属関係
+charlie --delegatedBy--> alice  // 委譲関係
+```
+
+**推移的権限の仕組み:**
+```typescript
+// エンティティ間関係 → リソース直接関係 → 具体的権限
+alice --manages--> dev-team     // (b) エンティティ間関係
+bob --memberOf--> dev-team      // (b) エンティティ間関係  
+bob --owns--> document1         // (a) リソース直接関係
+                                // → aliceはmanages関係により権限取得
+```
+
+**重要な注意点:**
+
+1. **カテゴリ分けは必須ではない** - ReBACの本質的要件ではなく、実装の設計選択
+2. **複数関係の共存** - 1つのリソースに対して複数の関係が存在可能
+3. **権限の合流** - 異なる関係パスが同じリソースへの権限を提供
+
+```typescript
+// 複数関係の例：Aliceとdocument1
+alice --owns--> document1           // 直接所有
+alice --memberOf--> editors         // エディターグループ経由
+editors --editor--> document1       // グループ権限
+
+// どちらの関係からでもアクセス可能（最強の権限が適用）
 ```
 
 ### 他の権限管理モデルとの位置づけ
@@ -402,6 +487,87 @@ ABAC → ReBAC の発展
 | **SpiceDB** | Zanzibarインスパイア、オープンソース |
 | **OpenFGA** | Auth0/Okta、CNCF |
 | **Ory Keto** | Go実装、シンプル |
+
+### ReBACの設計の柔軟性
+
+#### 関係性の分類は実装の自由度
+
+**ReBACの本質**: 関係性グラフによる権限導出
+**分類の目的**: わかりやすく整理するための設計選択
+
+```typescript
+// 例1：カテゴリなし（フラット設計）
+type RelationType = string  // 任意の関係を許可
+// Zanzibarのような大規模システムでよく採用
+
+// 例2：3カテゴリ（時間軸を追加）
+type RelationType = 
+  | 'owns' | 'editor' | 'viewer'           // リソース権限
+  | 'manages' | 'memberOf'                 // 組織構造
+  | 'wasOwner' | 'willBeEditor'           // 時間的関係
+
+// 例3：ドメイン特化型
+type RelationType =
+  | 'patient' | 'doctor' | 'nurse'        // 医療ドメイン
+  | 'hasAccessTo' | 'canPrescribe'        // 権限
+  | 'supervisedBy' | 'consultsWith'       // 協力関係
+```
+
+#### 実世界での多様なアプローチ
+
+**Google Zanzibar**: 統一的な関係表現
+```typescript
+// すべての関係を同じように扱う
+(user:alice, edit, doc:readme)
+(group:editors, member, user:alice)
+(doc:readme, parent, folder:documents)
+```
+
+**SpiceDB**: スキーマベースの関係定義
+```typescript
+definition document {
+  relation owner: user
+  relation editor: user | group#member  // 複合的な関係
+  permission edit = owner + editor      // 関係の合成
+}
+```
+
+**OpenFGA**: 型定義による構造化
+```typescript
+{
+  "type_definitions": [{
+    "type": "document",
+    "relations": {
+      "owner": { "this": {} },
+      "can_edit": { "computedUserset": { "relation": "owner" } }
+    }
+  }]
+}
+```
+
+#### 設計選択の考慮事項
+
+| 観点 | フラット設計 | カテゴリ分類 |
+|------|-------------|-------------|
+| **柔軟性** | ✅ 任意の関係を追加可能 | ⚠️ カテゴリの制約あり |
+| **型安全性** | ⚠️ 文字列ベース | ✅ Union型で制限 |
+| **学習しやすさ** | ⚠️ 概念が曖昧 | ✅ 明確な分類 |
+| **スケーラビリティ** | ✅ 制限なし | ⚠️ 拡張時に型変更 |
+| **デバッグ性** | ⚠️ 関係の意味が不明確 | ✅ カテゴリで推論可能 |
+
+#### まとめ：設計の本質
+
+**変わらない要素**（ReBACの本質）:
+- エンティティ間の関係をグラフで表現
+- グラフ探索による推移的権限導出
+- 関係から具体的権限への変換ルール
+
+**変わる要素**（実装の自由度）:
+- 関係性の分類方法
+- タプルの命名規則
+- 権限ルールの定義方式
+
+学習用実装では理解しやすさを重視したカテゴリ分類を採用しましたが、実際のシステムでは用途に応じて最適な設計を選択することが重要です。
 
 ### ReBACの利点と課題
 
