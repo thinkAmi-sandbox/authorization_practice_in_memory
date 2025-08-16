@@ -445,6 +445,44 @@ const PERMISSION_RULES = [
 }
 ```
 
+### パス全体での権限判定メカニズム
+
+ReBACの権限判定は「**パス全体の中で、要求されたアクションを許可する関係が1つでもあれば権限付与**」という仕組みです。
+
+#### 具体的な判定プロセス
+
+```typescript
+// 発見されたパス（例）
+[
+  { subject: 'alice', relation: 'manages', object: 'dev-team' },    // ← この関係が重要
+  { subject: 'bob', relation: 'memberOf', object: 'dev-team' },
+  { subject: 'bob', relation: 'owns', object: 'document1' }
+]
+
+// PermissionRules
+manages: { read: true, write: true }  // ← managesはwriteを許可
+memberOf: { read: false, write: false }
+owns: { read: true, write: true }
+```
+
+#### 判定ロジック
+
+1. **アクション要求**: Alice が document1 を **write** したい
+2. **パス内の関係をチェック**: 
+   - `manages` → write: true ✅ **権限あり！**
+   - `memberOf` → write: false
+   - `owns` → write: true ✅ （これも権限ありだが、既に判定済み）
+
+3. **結果**: パス内に1つでもwrite権限を持つ関係（manages）があるため、**権限付与**
+
+#### 重要なポイント
+
+- **パス全体が権限の根拠**：`alice → dev-team → bob → document1` の関係連鎖
+- **判定は「OR条件」**：パス内のどれか1つの関係でも条件を満たせば権限付与
+- **権限の源泉**：「Alice が manages 関係を持つ」ことが権限の理由
+
+これがReBACの「**推移的権限**」の本質です。直接の所有者でなくても、関係の連鎖を通じて権限を獲得できる仕組みです。
+
 ### 権限導出が「間接的」である理由
 
 **直接的権限**: `bob --owns--> document1` → Bobは直接の所有者
@@ -1075,6 +1113,93 @@ definition document {
 
 学習用実装では理解しやすさを重視したカテゴリ分類を採用しましたが、実際のシステムでは用途に応じて最適な設計を選択することが重要です。
 
+### ReBACのセキュリティモデル：Denyの不要性
+
+#### 基本ReBACにおけるセキュリティ設計
+
+基本的なReBACには**Deny概念が存在しない**設計となっており、これは意図的な設計選択です。
+
+#### なぜDenyが不要なのか
+
+**1. デフォルトはDeny（暗黙的拒否）**
+```typescript
+// 関係パスが見つからない = 権限なし
+if (パスなし) return { type: 'denied' }
+```
+- 明示的な関係がない限り、アクセスは拒否される
+- これは「**ホワイトリスト方式**」のセキュリティモデル
+
+**2. 関係の存在 = 信頼の証**
+```typescript
+alice --manages--> dev-team
+bob --memberOf--> dev-team
+```
+- これらの関係は「**意図的に設定された信頼関係**」
+- 偶然や誤って権限が付与されることはない
+
+**3. 1つでも権限があれば付与の安全性**
+
+ReBACでは「パス内の1つでも権限を持つ関係があれば権限付与」という仕組みですが、これがセキュリティ上安全な理由：
+
+- **全ての関係が明示的**：システム管理者が意図的に設定した関係のみ
+- **関係削除で即座に権限失効**：不要な権限は関係を削除するだけで解決
+- **構造的な安全性**：関係がある＝権限の根拠があるという1対1対応
+
+#### 他の権限モデルとの比較
+
+| モデル | Deny機能 | 理由 | セキュリティモデル |
+|--------|----------|------|-------------------|
+| **ACL** | あり | 個別にAllow/Denyを設定するため、競合解決が必要 | 個別設定型 |
+| **ABAC** | あり | 複雑なルールで例外処理が必要 | ルールベース |
+| **ReBAC** | **なし** | 関係の存在自体が許可を意味するため不要 | **関係ベース** |
+
+#### 実世界での実証
+
+**Google Zanzibar**（ReBACの元祖）もDenyなし：
+- YouTubeやGoogle Driveで実用
+- 関係の追加・削除のみで権限管理
+- セキュリティ上の問題は報告されていない
+
+#### 権限削除の仕組み
+
+```typescript
+// 権限を削除したい場合
+removeRelation('alice', 'manages', 'dev-team')
+// → 即座にaliceのdev-team経由の権限が失われる
+
+// システム設計例
+class ReBACSystem {
+  removeRelation(subject: string, relation: string, object: string) {
+    this.relations.delete(relationTuple)
+    // 関係削除により、この関係を経由する全ての権限パスが無効化
+  }
+}
+```
+
+#### 例外的にDenyが必要な場合
+
+特殊な要件がある場合は拡張が可能：
+
+```typescript
+// 例：一時的な権限停止
+alice --manages--> dev-team
+alice --suspended--> dev-team  // 特別な「否定的関係」
+
+// この場合、権限ルールを拡張
+if (関係に'suspended'が含まれる) return { type: 'denied' }
+```
+
+しかし、これは**基本的なReBACの範囲外**で、特殊な要件がある場合の拡張です。
+
+#### まとめ：ReBACのセキュリティ哲学
+
+- **基本ReBACはDenyなしで安全**：デフォルト拒否＋明示的な関係のみ許可
+- **OR判定で問題なし**：1つでも有効な関係があれば権限付与
+- **シンプルで理解しやすい**：Allow/Denyの競合解決が不要
+- **実績あり**：Google等の大規模システムで実証済み
+
+この設計により、ReBACは**シンプルさと安全性を両立**しています。
+
 ### ReBACの利点と課題
 
 #### 利点
@@ -1082,6 +1207,7 @@ definition document {
 2. **動的な権限伝播**: 関係が変われば自動的に権限も更新
 3. **明確な監査証跡**: パス全体が権限の根拠
 4. **推移的権限**: 複雑な階層構造を自然に扱える
+5. **セキュリティモデルの単純性**: Denyなしでも安全な設計
 
 #### 課題
 1. **性能**: グラフ探索のコスト
