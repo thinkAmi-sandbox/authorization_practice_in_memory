@@ -158,7 +158,7 @@ ReBACの権限判定は **2段階のプロセス** で行われます：
 
 **手法**: BFS（幅優先探索）を使用
 
-**例**: 「Aliceがdocument1にアクセスできるか？」
+**例**: 「Aliceがdocument1にアクセスできるか？」（簡略版）
 ```
 探索開始: alice
 ↓
@@ -170,6 +170,144 @@ bob --owns--> document1 (Level 3、目標発見！)
 
 発見されたパス:
 [
+  { subject: 'alice', relation: 'manages', object: 'dev-team' },
+  { subject: 'bob', relation: 'memberOf', object: 'dev-team' },
+  { subject: 'bob', relation: 'owns', object: 'document1' }
+]
+```
+
+### BFS探索の詳細メカニズム
+
+#### なぜ双方向探索が必要なのか
+
+BFSでは、**任意のノードに到達した際、そのノードに接続されているすべてのエッジを探索**します：
+
+```typescript
+// dev-teamに到達した時の完全な探索
+function exploreFromDevTeam() {
+  // 1. 順方向（dev-teamから出ている関係）
+  dev-team --owns--> team-repository
+  dev-team --manages--> project-docs  
+  dev-team --reports-to--> engineering-dept
+  
+  // 2. 逆方向（dev-teamへ入ってくる関係）
+  alice --manages--> dev-team      // 既に訪問済み（スキップ）
+  bob --memberOf--> dev-team       // 新規発見
+  charlie --memberOf--> dev-team   // 新規発見
+  david --memberOf--> dev-team     // 新規発見
+}
+```
+
+#### 「Bobが選ばれた」のではなく「発見された」
+
+**重要な誤解の解消**: Bobは特別に選ばれたのではありません。
+
+```typescript
+// 実際の発見プロセス
+dev-teamのすべてのメンバーを発見:
+- bob --memberOf--> dev-team ✅ 発見
+- charlie --memberOf--> dev-team ✅ 発見  
+- david --memberOf--> dev-team ✅ 発見
+
+すべてがキューに追加される:
+queue = [team-repository, project-docs, engineering-dept, bob, charlie, david]
+
+各ノードから順番に探索:
+- team-repository → document1なし
+- project-docs → document1なし
+- engineering-dept → document1なし
+- bob → bob --owns--> document1 ✅ 最初に発見！
+```
+
+#### 双方向探索の必然性
+
+**組織構造を考えると自然**:
+
+```
+alice（マネージャー）
+  ↓ manages
+dev-team（チーム）
+  ↑ memberOf
+bob, charlie, david（メンバー）
+  ↓ owns
+各自のドキュメント
+```
+
+**マネージャーはチームメンバーの成果物に権限を持つべき**という組織の自然な構造を、双方向探索が実現しています。
+
+#### グラフ探索の基本ルール
+
+```typescript
+class RelationGraph {
+  // 双方向のインデックスを保持
+  private forwardIndex: Map<EntityId, Set<Relation>>   // A → B
+  private reverseIndex: Map<EntityId, Set<Relation>>   // B ← A
+  
+  getRelatedNodes(node: EntityId): EntityId[] {
+    const related = []
+    
+    // 1. 順方向の関係
+    const forward = this.forwardIndex.get(node) || []
+    for (const rel of forward) {
+      related.push(rel.object)  // node → object
+    }
+    
+    // 2. 逆方向の関係（重要！）
+    const reverse = this.reverseIndex.get(node) || []
+    for (const rel of reverse) {
+      related.push(rel.subject)  // subject → node
+    }
+    
+    return related  // 両方向のノードを返す
+  }
+}
+```
+
+**ポイント**: dev-teamで逆引きする「判断」は実は判断ではなく、**BFSの基本ルール**です。
+
+#### 完全な探索フローの例
+
+より現実的なグラフ構造での探索プロセス：
+
+```typescript
+// グラフ構造（より複雑な例）
+alice --manages--> dev-team
+alice --collaborates--> charlie
+dev-team --owns--> team-repository
+dev-team --manages--> project-docs
+bob --memberOf--> dev-team
+charlie --memberOf--> dev-team
+david --memberOf--> dev-team
+bob --owns--> document1
+charlie --owns--> document2
+
+// BFSキューの状態遷移
+初期: queue = [alice], visited = [alice]
+
+Level 1:
+- aliceを処理
+- 順方向：alice --manages--> dev-team, alice --collaborates--> charlie
+- 逆方向：なし
+- queue = [dev-team, charlie], visited = [alice, dev-team, charlie]
+
+Level 2:
+- dev-teamを処理
+  - 順方向：dev-team --owns--> team-repository, dev-team --manages--> project-docs
+  - 逆方向：bob --memberOf--> dev-team, david --memberOf--> dev-team（charlieは既にvisited）
+  - queue = [charlie, team-repository, project-docs, bob, david]
+  
+- charlieを処理
+  - 順方向：charlie --owns--> document2
+  - 逆方向：alice --collaborates--> charlie（既にvisited）
+  - queue = [team-repository, project-docs, bob, david, document2]
+
+Level 3:
+- team-repositoryを処理 → document1なし
+- project-docsを処理 → document1なし  
+- bobを処理 → bob --owns--> document1 ✅ 発見！
+
+最終結果:
+path = [
   { subject: 'alice', relation: 'manages', object: 'dev-team' },
   { subject: 'bob', relation: 'memberOf', object: 'dev-team' },
   { subject: 'bob', relation: 'owns', object: 'document1' }
@@ -357,6 +495,113 @@ findRelationPath(subject: EntityId, targetObject: EntityId): RelationPath | null
   
   return null // 関係性が見つからない
 }
+```
+
+### visitedセットの役割と重要性
+
+#### visitedセットの2つの重要な機能
+
+**1. 無限ループの防止**
+
+```typescript
+// 循環がある場合
+alice --manages--> dev-team
+dev-team --partOf--> dept
+dept --oversees--> dev-team  // 循環！
+
+// visitedがなければ：
+alice → dev-team → dept → dev-team → dept → ... // 無限ループ
+
+// visitedがあれば：
+alice → dev-team → dept → (dev-teamはvisited内) → 停止 ✅
+```
+
+**2. 探索の効率化**
+
+```typescript
+// 複数経路がある複雑なグラフ
+     alice
+    /  |  \
+   v   v   v
+team1 team2 team3
+   \   |   /
+    v  v  v
+      bob
+      
+// visitedなし: bobを3回探索してしまう（無駄）
+// visitedあり: bobは1回だけ探索（効率的） ✅
+```
+
+#### なぜ再探索が不要なのか
+
+**BFSの重要な性質**: 最初に到達した経路が最短経路
+
+```typescript
+// ケース1: 最初にbobに到達
+alice → dev-team → bob (2ホップ) ✅ visitedに追加
+
+// ケース2: 後から別経路でbobを発見  
+alice → foo → bar → bob (3ホップ) 
+// → bobは既にvisited内なのでスキップ
+// → より長い経路なので探索する価値がない！
+```
+
+#### visitedセットの動作例
+
+```typescript
+// グラフ構造
+alice --manages--> dev-team
+alice --collaborates--> bob
+dev-team <--memberOf-- bob
+bob --owns--> document1
+
+// 探索の流れ
+Step 1: visited = [alice]
+- alice処理中...
+- dev-team発見 → visited = [alice, dev-team]
+- bob発見 → visited = [alice, dev-team, bob]
+
+Step 2: visited = [alice, dev-team, bob]
+- dev-team処理中...
+- bob発見（memberOf経由）→ すでにvisited内 → スキップ！
+
+Step 3: visited = [alice, dev-team, bob]
+- bob処理中...
+- document1発見 → 目標達成！
+```
+
+#### 実装でのvisitedタイミング
+
+```typescript
+// ✅ 正しい実装（発見時点で追加）
+if (!visited.has(node)) {
+  visited.add(node)  // キューに入れる前に追加
+  queue.push(node)
+}
+
+// ❌ 間違った実装（処理時点で追加）
+queue.push(node)
+// ... 後で
+if (!visited.has(node)) {
+  visited.add(node)  // 遅すぎる！同じノードが複数回キューに入る
+}
+```
+
+#### visitedの本質
+
+**visitedが表現すること**:
+- 「このノードから出る全ての辺は既に探索済み」を保証
+- 再訪問は無駄（BFSでは最初の訪問が最短経路）
+- 循環の防止と効率化の両方を実現
+
+```typescript
+// foo → bobという経路が見つかっても
+// bobは探索済なのでスキップ ✅
+if (!visited.has('bob')) {  // bobは既にvisitedに存在
+  // このブロックは実行されない
+  queue.push('bob')
+} 
+// → bobはスキップされる！
 ```
 
 ### 循環検出
