@@ -728,6 +728,175 @@ interface ReBACConfig {
 if (depth >= this.config.maxDepth) continue
 ```
 
+### 探索アルゴリズムの選択肢
+
+ReBACでは標準的にBFSが使用されますが、特定の要件に応じて他のアルゴリズムも選択可能です。
+
+#### 1. Bidirectional BFS（双方向BFS）
+
+**重要**: これは上記の「エッジの双方向探索」とは異なる概念です。
+
+**概念の区別**:
+
+| 概念 | 内容 | 目的 |
+|-----|------|------|
+| **エッジの双方向探索**（ReBACの基本動作） | 各ノードで順方向・逆方向の両エッジを探索 | ReBACの関係性を正しく辿るため |
+| **Bidirectional BFS**（最適化アルゴリズム） | 開始点と終点から2つのBFSを同時実行 | 探索空間を削減する最適化 |
+
+**Bidirectional BFSの仕組み**:
+
+```typescript
+// 開始点と終点から同時に探索
+function bidirectionalBFS(start: string, end: string) {
+  const forwardQueue = [start]
+  const backwardQueue = [end]
+  const forwardVisited = new Set([start])
+  const backwardVisited = new Set([end])
+  
+  while (forwardQueue.length > 0 && backwardQueue.length > 0) {
+    // 前方探索の1ステップ
+    const currentForward = forwardQueue.shift()
+    for (const neighbor of getNeighbors(currentForward)) {
+      if (backwardVisited.has(neighbor)) {
+        // 🎯 交差発見！即座に停止して最短パス構築
+        return constructPath(neighbor)
+      }
+      if (!forwardVisited.has(neighbor)) {
+        forwardVisited.add(neighbor)
+        forwardQueue.push(neighbor)
+      }
+    }
+    
+    // 後方探索の1ステップ（同様の処理）
+    // ...
+  }
+}
+```
+
+**効果の比較**:
+
+```typescript
+// 通常のBFS
+alice から探索: Level 4で発見 → 約10,000ノード探索
+
+// Bidirectional BFS  
+前方: alice → Level 2 → 約100ノード
+後方: document1 → Level 2 → 約100ノード
+中間で出会う → 合計約200ノード（50倍効率的！）
+```
+
+**採用例**: Google Zanzibar、大規模グラフでの権限チェック
+
+#### 2. A*探索（ヒューリスティック探索）
+
+関係に「重み」や「優先度」がある場合に有効：
+
+```typescript
+// 関係の重みを定義
+const relationWeights = {
+  'owns': 1,      // 最優先
+  'manages': 2,   // 次に優先
+  'memberOf': 3   // 一般的な関係
+}
+
+// ヒューリスティック関数
+function heuristic(current: string, target: string): number {
+  // より「強い権限関係」を優先する
+  return estimateMinimumCost(current, target)
+}
+```
+
+**適用場面**: 
+- 権限の「強さ」に序列がある場合
+- 最も確実な権限パスを見つけたい場合
+
+#### 3. Iterative Deepening BFS
+
+メモリ効率を重視する場合：
+
+```typescript
+function iterativeDeepeningBFS(start: string, target: string) {
+  for (let depth = 1; depth <= maxDepth; depth++) {
+    const result = depthLimitedBFS(start, target, depth)
+    if (result) return result
+  }
+  return null
+}
+```
+
+**特徴**:
+- メモリ使用量: O(d) （dは深さ）
+- BFSと同じ最短パス保証
+- 小規模探索で効果的
+
+#### 4. 並列グラフ探索
+
+複数の関係タイプを同時に探索：
+
+```typescript
+// 各関係タイプで並列探索
+async function parallelSearch(subject: string, object: string) {
+  const searches = await Promise.all([
+    findPath(subject, object, 'owns'),
+    findPath(subject, object, 'manages'), 
+    findPath(subject, object, 'editor')
+  ])
+  
+  // 最初に見つかったパスを採用
+  return searches.find(path => path !== null)
+}
+```
+
+**採用例**: SpiceDB、複数関係タイプの権限システム
+
+#### 5. インデックスベース探索
+
+事前計算による高速化：
+
+```typescript
+// 推移的閉包（Transitive Closure）の事前計算
+class TransitiveClosure {
+  private closure: Map<string, Set<string>>
+  
+  // 事前計算フェーズ
+  precompute() {
+    // 全てのペアの到達可能性を計算
+    for (const start of allNodes) {
+      this.closure.set(start, this.computeReachable(start))
+    }
+  }
+  
+  // O(1)での権限チェック
+  canAccess(subject: string, object: string): boolean {
+    return this.closure.get(subject)?.has(object) ?? false
+  }
+}
+```
+
+**トレードオフ**: 
+- 事前計算コスト vs クエリ時の高速応答
+- メモリ使用量 vs 性能
+
+#### アルゴリズム選択の指針
+
+| 要件 | 推奨アルゴリズム | 理由 |
+|-----|----------------|------|
+| **小〜中規模、学習目的** | 通常のBFS | シンプル、理解しやすい |
+| **大規模グラフ** | Bidirectional BFS | 探索空間の劇的削減 |
+| **関係に重み付け** | A*探索 | 最適な権限パスの発見 |
+| **メモリ制約** | Iterative Deepening | 少ないメモリ使用量 |
+| **複数関係タイプ** | 並列探索 | 高いスループット |
+| **読み取り頻度が高い** | インデックス | クエリ時の高速応答 |
+
+#### まとめ：なぜBFSが標準なのか
+
+1. **実装の単純性**: 理解しやすく、バグが少ない
+2. **最短パスの保証**: 権限の根拠として重要
+3. **予測可能な性能**: O(V+E)の保証
+4. **循環対応が簡単**: visitedセットで対処
+
+より高度なアルゴリズムは、**特定の要件がある場合にのみ検討**すべきです。学習段階では、まずBFSの仕組みを完全に理解することが重要です。
+
 ---
 
 ## 他モデルとの比較
