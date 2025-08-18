@@ -2578,3 +2578,239 @@ const DEFAULT_PERMISSION_RULES = [
 Google Zanzibarの核心概念を採用しながら、学習用として必要十分な機能に絞り込むことで、ReBACの本質的な仕組みを理解できる設計となっています。グラフ理論の実践的な応用を通じて、現代的な権限管理システムの実装パターンを習得できます。
 
 最小限のAPIと明確な型定義により、関係性グラフの構築から権限の推移的導出まで、ReBACの全体像を段階的に学習できる構成となっています。
+
+## 11. 実装における設計判断の詳細
+
+### 11.1 権限判定アルゴリズムの実装アプローチ
+
+#### 11.1.1 現在の実装方式：パスベース判定
+
+```typescript
+// 現在のcheckRelationメソッドの実装方針
+checkRelation(subject: EntityId, action: PermissionAction): ReBACDecision {
+  // 1. アクションに必要な関係性タイプを取得
+  const requiredRelations = this.getRequiredRelations(action);
+  
+  // 2. subjectからresourceへのパスを探索
+  const pathResult = this.findPathToResource(subject);
+  
+  // 3. パス内に必要関係性が含まれているかチェック
+  if (pathResult.type === 'found') {
+    const relations = pathResult.path.map(tuple => tuple.relation);
+    const matchedRelation = relations.find(relation => 
+      requiredRelations.has(relation)
+    );
+    // パスに必要関係性が含まれていれば権限付与
+  }
+}
+```
+
+**特徴:**
+- **パス内出現チェック**: 関係性がパスのどこかに含まれていれば権限を付与
+- **関係の出発点を問わない**: 誰がその関係を持っているかは考慮しない
+- **実装の簡潔性**: BFS一回で判定が完了、理解しやすい
+
+#### 11.1.2 厳密な実装方式：起点関係チェック
+
+```typescript
+// 厳密な実装での考え方
+checkRelation(subject: EntityId, action: PermissionAction): ReBACDecision {
+  const requiredRelations = this.getRequiredRelations(action);
+  
+  // 各必要関係性について、subjectがその関係を起点として持っているかチェック
+  for (const requiredRelation of requiredRelations) {
+    if (this.hasRelationAsOrigin(subject, requiredRelation, this.resourceId)) {
+      return { type: 'granted', relation: requiredRelation, ... };
+    }
+  }
+  
+  return { type: 'denied', ... };
+}
+
+// subjectが特定の関係を起点として持っているかの判定
+private hasRelationAsOrigin(
+  subject: EntityId, 
+  relation: RelationType, 
+  target: EntityId
+): boolean {
+  // BFSでパスを探索し、最初のステップがrelationであるパスのみ有効
+}
+```
+
+**特徴:**
+- **起点関係の重視**: subjectが直接的にその関係を持っている場合のみ権限付与
+- **関係の出発点を厳密にチェック**: 誰がその関係の主体かを明確に区別
+- **実装の複雑さ**: 関係性ごとに個別の探索が必要
+
+#### 11.1.3 実装方式の比較分析
+
+| 観点 | パスベース判定 | 起点関係チェック |
+|------|---------------|------------------|
+| **実装の簡潔性** | ◎ 単一のBFS探索 | △ 関係性ごとの探索 |
+| **性能** | ◎ O(V+E) | △ O(R×(V+E)) |
+| **直感的理解** | ○ パスの存在で判定 | ◎ 関係の主体を明確化 |
+| **学習効果** | ◎ グラフ探索に集中 | ○ 関係性の厳密さを学習 |
+| **実用性** | ◎ 多くの場面で妥当 | ○ 厳密な権限制御が必要な場面 |
+
+### 11.2 ReBACの標準化と実装の多様性
+
+#### 11.2.1 ReBAC分野における標準の現状
+
+**形式的標準の不在**
+- ReBACには統一された形式的な標準規格が存在しない
+- 各実装が独自の解釈とアプローチを採用
+- Google Zanzibarが事実上のリファレンス実装として機能
+
+**実装の多様性**
+```
+Level 1: Direct ReBAC
+└─ 直接関係のみ（A owns B）
+
+Level 2: Transitive ReBAC  ← 現在の実装レベル
+└─ 推移的関係（A memberOf B, B owns C → A can access C）
+
+Level 3: Rule-based ReBAC
+└─ 明示的ルール定義（team#member → team所有リソースにアクセス可能）
+```
+
+#### 11.2.2 主要実装の設計哲学
+
+**Google Zanzibar系（OpenFGA、SpiceDB）**
+- 明示的な関係定義とルールベースの推論
+- スキーマによる関係性の制約定義
+- 計算されたユーザーセット（computed user sets）の概念
+
+```
+# OpenFGAでの例
+model
+  schema 1.1
+
+type team
+  relations
+    define member: [user]
+
+type document  
+  relations
+    define owner: [team]
+    define viewer: owner->member  # チームメンバーは閲覧可能
+```
+
+**現在の実装アプローチ**
+- グラフ探索によるパス発見方式
+- シンプルな関係性タプルの集合
+- ルールはpermissionRulesで外部定義
+
+#### 11.2.3 実装選択の妥当性
+
+**学習目的での現在のアプローチの利点:**
+1. **概念の明確性**: グラフ理論の直接的な応用
+2. **実装の透明性**: BFSアルゴリズムの理解に集中
+3. **段階的学習**: まず基本概念、後に高度な機能
+
+**産業利用での考慮点:**
+1. **スケーラビリティ**: 大規模グラフでの性能
+2. **表現力**: 複雑な組織ルールの表現
+3. **保守性**: スキーマ変更への対応
+
+### 11.3 関係性の意味論と解釈の設計判断
+
+#### 11.3.1 「owns」関係の意味論
+
+**個人所有vs組織所有の問題**
+
+現在の実装では以下のケースが可能：
+```typescript
+// シナリオ：チーム所有リソースへのメンバーアクセス
+alice --memberOf--> dev-team
+dev-team --owns--> document1
+
+// 現在の実装: alice は document1 にアクセス可能
+// 理由: パス内に'owns'関係が存在するため
+```
+
+**設計判断の考慮点:**
+
+1. **直感的解釈**: 「チームの所有物にはメンバーがアクセスできる」
+2. **実用的妥当性**: 多くの組織で採用されている権限モデル
+3. **学習効果**: 関係の推移性を理解しやすい
+
+#### 11.3.2 関係性解釈の実装パターン
+
+**パターン1: 包含的解釈（現在の実装）**
+```typescript
+// owns関係がパスに含まれていれば、関係性の主体を問わずアクセス許可
+alice --memberOf--> team --owns--> doc
+→ alice can access doc (owns関係が存在するため)
+```
+
+**パターン2: 厳密な解釈**
+```typescript
+// aliceが直接owns関係を持つ場合のみアクセス許可
+alice --owns--> doc ✓
+alice --memberOf--> team --owns--> doc ✗ (aliceは直接ownerではない)
+```
+
+**パターン3: ルールベース解釈（Level 3 ReBAC）**
+```typescript
+// 明示的ルール: "team#member は team が所有するリソースにアクセス可能"
+rule: team#member -> team所有リソース.viewer
+alice --memberOf--> team --owns--> doc 
+→ ルールにより alice は viewer権限を取得
+```
+
+#### 11.3.3 現在の設計判断の根拠
+
+**1. 学習効果の最大化**
+- グラフ探索の概念に集中
+- 複雑なルール体系を避けて本質理解を促進
+
+**2. 実用的妥当性**
+- 組織の一般的な権限慣行と一致
+- 「チームの所有物はメンバーが使用可能」という直感に合致
+
+**3. 実装の簡潔性**
+- 単一のBFSアルゴリズムで完結
+- デバッグと理解が容易
+
+### 11.4 現在の実装の位置づけと制限
+
+#### 11.4.1 実装レベルの分類
+
+**現在の実装: Level 2 Transitive ReBAC**
+- 推移的関係性による権限導出
+- パスベースの権限判定
+- 基本的なグラフ探索アルゴリズム
+
+**制限事項:**
+1. **明示的ルール定義の不在**: 関係性の組み合わせルールを定義不可
+2. **計算されたユーザーセットの未実装**: 動的なユーザーグループ生成不可
+3. **スキーマ制約の不在**: 関係性の制約をコードで表現
+
+#### 11.4.2 学習段階での適切性
+
+**初学者にとっての利点:**
+1. **概念の明確性**: グラフ = 関係性、探索 = 権限チェック
+2. **アルゴリズムの透明性**: BFSの動作を直接確認可能
+3. **デバッグの容易性**: パスをトレースして判定根拠を確認
+
+**次段階への発展可能性:**
+1. **ルールエンジンの追加**: permissionRulesの拡張
+2. **動的関係性の実装**: 計算されたユーザーセットの導入
+3. **スキーマ定義の追加**: 型安全な関係性制約
+
+#### 11.4.3 産業利用との橋渡し
+
+**現在の実装から産業レベルへの拡張ポイント:**
+
+1. **スケーラビリティ**: インデックス最適化、キャッシュ戦略
+2. **表現力**: より複雑な組織ルールへの対応
+3. **保守性**: スキーマ駆動の関係性定義
+
+**学習から実践への移行パス:**
+```
+学習実装 → SpiceDB/OpenFGA → Zanzibar-class system
+│          │                  │
+│          │                  └─ 産業レベルの本格実装
+│          └─ OSS での実践経験
+└─ 基本概念の理解
+```
