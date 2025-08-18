@@ -394,15 +394,40 @@ export class ReBACProtectedResource {
    * @returns 権限判定結果
    */
   checkRelation(subject: EntityId, action: PermissionAction): ReBACDecision {
-    // TODO: 実装してください
-    // ヒント：
-    // 1. getRequiredRelationsでactionに必要な関係性を取得
-    // 2. 各関係性についてfindPathToResourceでパスを探索
-    // 3. 探索結果に応じて適切なReBACDecisionを返す：
-    //    - パスが見つかった → { type: 'granted', path, relation }
-    //    - 全ての関係性で見つからない → { type: 'denied', reason: 'no-relation', searchedRelations }
-    //    - 深度制限超過 → { type: 'denied', reason: 'max-depth-exceeded', maxDepth }
-    throw new Error('Not implemented');
+    const requiredRelations = this.getRequiredRelations(action);
+
+    const result = this.findPathToResource(subject);
+
+    switch (result.type) {
+      case 'not-found':
+        return {
+          type: 'denied',
+          reason: 'no-relation',
+          searchedRelations: Array.from(requiredRelations)
+        }
+
+      case 'max-depth-exceeded':
+        return {
+          type: 'denied',
+          reason: 'max-depth-exceeded',
+          maxDepth: result.maxDepth
+        }
+
+      case 'found':
+        const relations = result.path.map(tuple => tuple.relation);
+
+        const matchedRelation = relations.find(relation => requiredRelations.has(relation));
+        if (matchedRelation) {
+          return { type: 'granted', path: result.path, relation: matchedRelation };
+        }
+
+        // パスは存在していたものの、actionの権限がない
+        return {
+          type: 'denied',
+          reason: 'no-relation',
+          searchedRelations: Array.from(requiredRelations)
+        }
+    }
   }
 
   /**
@@ -424,9 +449,7 @@ export class ReBACProtectedResource {
    * @returns 探索結果
    */
   private findPathToResource(subject: EntityId): ExplorationResult {
-    // TODO: 実装してください
-    // ヒント：explorerのfindRelationPathを使ってresourceIdへのパスを探索
-    throw new Error('Not implemented');
+    return this.explorer.findRelationPath(subject, this.resourceId);
   }
 
   /**
