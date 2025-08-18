@@ -39,6 +39,27 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
         const relations = graph.getRelations('user1');
         expect(relations.length).toBe(1);
       })
+      it('同じsubjectとrelationでも異なるobjectは別の関係として扱われること', () => {
+        const graph = new RelationGraph();
+        const relation1: RelationTuple = {
+          subject: 'user1',
+          relation: 'owns',
+          object: 'doc1'
+        };
+        const relation2: RelationTuple = {
+          subject: 'user1',
+          relation: 'owns', 
+          object: 'doc2'
+        };
+        
+        graph.addRelation(relation1);
+        graph.addRelation(relation2);
+        
+        const relations = graph.getRelations('user1', 'owns');
+        expect(relations.length).toBe(2);
+        expect(relations).toContainEqual(relation1);
+        expect(relations).toContainEqual(relation2);
+      })
     })
     
     describe('removeRelation', () => {
