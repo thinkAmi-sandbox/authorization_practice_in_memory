@@ -295,11 +295,11 @@ export class RelationGraph {
   }
 
   /**
-   * グラフをクリア
+   * すべての関係を削除
    */
   clear(): void {
-    // TODO: 実装してください
-    throw new Error('Not implemented');
+    this.adjacencyList.clear();
+    this.reverseAdjacencyList.clear();
   }
 }
 
