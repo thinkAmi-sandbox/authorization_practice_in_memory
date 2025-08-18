@@ -155,7 +155,15 @@ export class RelationGraph {
     // 1. adjacencyListに関係を追加
     // 2. reverseIndexにも逆方向の関係を追加
     // 3. 必要に応じてMapやSetを初期化
-    throw new Error('Not implemented');
+    const relations = this.adjacencyList.get(tuple.subject)
+    if (!relations) {
+      this.adjacencyList.set(tuple.subject, new Map([[tuple.relation, new Set([tuple.object])]]))
+    } else {
+      const objects = relations.get(tuple.relation) || new Set()
+      objects.add(tuple.object)
+      relations.set(tuple.relation, objects)
+      this.adjacencyList.set(tuple.subject, relations)
+    }
   }
 
   /**
@@ -179,9 +187,7 @@ export class RelationGraph {
    * @returns 関係が存在する場合true
    */
   hasDirectRelation(subject: EntityId, relation: RelationType, object: EntityId): boolean {
-    // TODO: 実装してください
-    // ヒント：adjacencyListを使って確認
-    throw new Error('Not implemented');
+    return !!this.adjacencyList.get(subject)?.get(relation)?.has(object)
   }
 
   /**
@@ -190,10 +196,34 @@ export class RelationGraph {
    * @param relation 関係の種類（省略時は全種類）
    * @returns 関係性タプルの配列
    */
-  getRelations(subject: EntityId, relation?: RelationType): RelationTuple[] {
-    // TODO: 実装してください
-    // ヒント：adjacencyListから関係を取得し、RelationTuple形式に変換
-    throw new Error('Not implemented');
+  getRelations(subject: EntityId, relation?: RelationType): ReadonlyArray<RelationTuple> {
+    const adjacencyList = this.adjacencyList.get(subject)
+    if (!adjacencyList) return []
+
+    if (relation) {
+      const filteredList = adjacencyList.get(relation)
+      if (!filteredList) {
+        return []
+      }
+
+      return [...filteredList].map(object => {
+        return {
+          subject,
+          relation,
+          object
+        }
+      })
+    }
+
+    return [...adjacencyList].flatMap(([relation, objects]) => {
+      return [...objects].map(object => {
+        return {
+          subject,
+          relation,
+          object
+        }
+      })
+    })
   }
 
   /**

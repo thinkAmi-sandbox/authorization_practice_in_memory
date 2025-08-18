@@ -27,6 +27,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
         // 逆方向インデックスも更新されることを確認
         expect(graph.getReverseRelations('doc1', 'owns')).toContainEqual(relation);
       })
+
       it('同じ関係を重複追加しても1つとして扱われること', () => {
         const graph = new RelationGraph();
         const relation: RelationTuple = {
