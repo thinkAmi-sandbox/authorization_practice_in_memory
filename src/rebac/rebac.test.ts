@@ -596,7 +596,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           
           expect(result).toMatchObject({
             type: 'granted',
-            relation: 'owns',
+            relation: 'manages', // 権限を付与した必要関係性（managesがread権限を持つため）
             path: expect.arrayContaining([relation1, relation2, relation3])
           });
         })
@@ -763,7 +763,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           
           expect(result).toMatchObject({
             type: 'granted',
-            relation: 'owns',
+            relation: 'manages', // 権限を付与した必要関係性（managesがwrite権限を持つため）
             path: expect.arrayContaining([relation1, relation2, relation3])
           });
         })
@@ -786,9 +786,10 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           const resource = new ReBACProtectedResource('doc1', graph);
           const result = resource.checkRelation('user1', 'write');
           
+          // パスにowns関係が含まれているため、ownsが権限を付与した必要関係性となる
           expect(result).toEqual({
             type: 'granted',
-            relation: 'owns',
+            relation: 'owns', // パスに含まれる必要関係性（ownsがwrite権限を持つため）
             path: [relation1, relation2]
           });
         })
@@ -836,9 +837,10 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
         
         const requiredRelations = resource.getRequiredRelations('write');
         
-        expect(requiredRelations).toContain('owns');
-        expect(requiredRelations).toContain('editor');
-        expect(requiredRelations).not.toContain('viewer');
+        expect(requiredRelations.has('owns')).toBe(true);
+        expect(requiredRelations.has('editor')).toBe(true);
+        expect(requiredRelations.has('manages')).toBe(true);
+        expect(requiredRelations.has('viewer')).toBe(false);
       })
       it('readアクションに必要な関係タイプを返すこと', () => {
         const graph = new RelationGraph();
@@ -846,9 +848,10 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
         
         const requiredRelations = resource.getRequiredRelations('read');
         
-        expect(requiredRelations).toContain('owns');
-        expect(requiredRelations).toContain('editor');
-        expect(requiredRelations).toContain('viewer');
+        expect(requiredRelations.has('owns')).toBe(true);
+        expect(requiredRelations.has('editor')).toBe(true);
+        expect(requiredRelations.has('manages')).toBe(true);
+        expect(requiredRelations.has('viewer')).toBe(true);
       })
     })
     

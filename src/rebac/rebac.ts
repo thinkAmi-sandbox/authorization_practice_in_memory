@@ -410,10 +410,12 @@ export class ReBACProtectedResource {
    * @param action 権限アクション
    * @returns 必要な関係タイプの配列
    */
-  getRequiredRelations(action: PermissionAction): RelationType[] {
-    return this.permissionRules
+  getRequiredRelations(action: PermissionAction): ReadonlySet<RelationType> {
+    return new Set(
+      this.permissionRules
       .filter(rule => rule.permissions[action])
-      .map(rule => rule.relation);
+      .map(rule => rule.relation)
+    );
   }
 
   /**
