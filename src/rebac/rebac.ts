@@ -327,16 +327,40 @@ export class RelationshipExplorer {
     subject: EntityId,
     targetObject: EntityId
   ): ExplorationResult {
-    // TODO: 実装してください
-    // ヒント：
-    // 1. BFSのためのキューを初期化（SearchState型を使用）
-    // 2. 訪問済みノードを管理（循環回避）
-    // 3. maxDepthで探索を制限し、超過した場合は 'max-depth-exceeded' を返す
-    // 4. targetObjectに到達したら { type: 'found', path } を返す
-    // 5. キューが空になったら { type: 'not-found' } を返す
-    throw new Error('Not implemented');
-  }
+    const queue: SearchState[] = [{ current: subject, path: [], depth: 0 }];
+    // 引数subjectは初回に探索するため、訪問済としておく
+    const visited = new Set<EntityId>([ subject ]);
 
+    while (queue.length > 0) {
+      const item = queue.shift();
+      if (!item) break; // 実際には発生し得ないが、型ガードする(`!`の回避)
+      const { current, path, depth } = item;
+
+      // BFSなので、どこか1箇所でもmaxDepthを超過したら、全体を打ち切ってしまって良い
+      if (depth >= this.config.maxDepth) {
+        return { type: 'max-depth-exceeded', maxDepth: this.config.maxDepth };
+      }
+
+      const relations = this.graph.getRelations(current);
+      for (const tuple of relations) {
+        if (tuple.object === targetObject) {
+          return { type: 'found', path: [ ...path, tuple ] };
+        }
+
+        if(visited.has(tuple.object)) continue;
+        visited.add(tuple.object);
+
+        // 次の深さではobjectをcurrentとして探索できるよう、queueに入れておく
+        queue.push({
+          current: tuple.object,
+          path: [ ...path, tuple ],
+          depth: depth + 1
+        });
+      }
+    }
+
+    return { type: 'not-found' };
+  }
 }
 
 // ============================================================
