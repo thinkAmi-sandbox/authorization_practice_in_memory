@@ -368,13 +368,13 @@ export class RelationshipExplorer {
   }
 
   /**
-   * 特定の関係から始まるパスを探索
+   * 特定のsubjectとrelationから始まるパスを探索
    * 
    * このメソッドは「最短パスが必ずしも有効なパスではない」問題を解決するために使用されます。
    * 
    * @param subject 開始エンティティ
    * @param targetObject 目標エンティティ  
-   * @param startingRelation 最初のステップで必要な関係タイプ
+   * @param targetRelation 最初のステップで必要な関係タイプ
    * @returns 探索結果（パス発見、未発見、深度制限超過）
    * 
    * @example
@@ -386,25 +386,51 @@ export class RelationshipExplorer {
    * // 2. なければ推移的なパスを探索：alice --memberOf--> team --editor--> document
    * // 3. 見つからなければnot-foundを返す
    */
-  findPathStartingWithRelation(
+  findPathWithRelation(
     subject: EntityId,
     targetObject: EntityId,
-    startingRelation: RelationType
+    targetRelation: RelationType
   ): ExplorationResult {
-    // TODO: 学習者が実装してください
-    // 
-    // 実装のヒント：
-    // 1. 直接関係をチェック：subject --startingRelation--> targetObject
-    // 2. 推移的関係を探索：subject --startingRelation--> intermediate --?--> targetObject
-    // 3. BFSを使用して最短パスを発見
-    // 4. 深度制限と循環検出を考慮
-    // 
-    // 期待される処理フロー：
-    // - Phase 1: 直接関係の確認
-    // - Phase 2: 推移的関係の探索（最初のステップは特定の関係タイプのみ）
-    // - Phase 3: 結果の構築
-    
-    throw new Error('Not implemented - 学習者が実装してください');
+    if (this.graph.hasDirectRelation(subject, targetRelation, targetObject)) {
+      return {
+        type: 'found',
+        path: [{ subject, relation: targetRelation, object: targetObject }]
+      };
+    }
+
+    const queue: SearchState[] = [{ current: subject, path: [], depth: 0 }];
+    // 引数subjectは初回に探索するため、訪問済としておく
+    const visited = new Set<EntityId>([ subject ]);
+
+    while (queue.length > 0) {
+      const item = queue.shift();
+      if (!item) break; // 実際には発生し得ないが、型ガードする(`!`の回避)
+      const { current, path, depth } = item;
+
+      // BFSなので、どこか1箇所でもmaxDepthを超過したら、全体を打ち切ってしまって良い
+      if (depth >= this.config.maxDepth) {
+        return { type: 'max-depth-exceeded', maxDepth: this.config.maxDepth };
+      }
+
+      const relations = this.graph.getRelations(current);
+      for (const tuple of relations) {
+        if (tuple.object === targetObject) {
+          return { type: 'found', path: [ ...path, tuple ] };
+        }
+
+        if(visited.has(tuple.object)) continue;
+        visited.add(tuple.object);
+
+        // 次の深さではobjectをcurrentとして探索できるよう、queueに入れておく
+        queue.push({
+          current: tuple.object,
+          path: [ ...path, tuple ],
+          depth: depth + 1
+        });
+      }
+    }
+
+    return { type: 'not-found' };
   }
 }
 
@@ -422,7 +448,7 @@ export class ReBACProtectedResource {
     private resourceId: EntityId,
     private graph: RelationGraph,
     private permissionRules: PermissionRule[] = DEFAULT_PERMISSION_RULES,
-    config?: ReBACConfig
+    private config?: ReBACConfig
   ) {
     this.explorer = new RelationshipExplorer(graph, config);
   }
@@ -471,6 +497,47 @@ export class ReBACProtectedResource {
   }
 
   /**
+   * 複数の関係性に基づいて権限をチェック
+   * @param subject チェック対象の主体
+   * @param action 実行したいアクション
+   * @returns 権限判定結果
+   */
+  checkValidRelation(subject: EntityId, action: PermissionAction): ReBACDecision {
+    const requiredRelations = this.getRequiredRelations(action);
+
+    let isMaxDepthExceeded = false;
+    for(const relation of requiredRelations) {
+      const result = this.explorer.findPathWithRelation(subject, this.resourceId, relation);
+
+      switch (result.type) {
+        case 'found':
+          return { type: 'granted', path: result.path, relation: relation };
+
+        case 'max-depth-exceeded':
+          isMaxDepthExceeded = true;
+          break;
+
+        default:
+          break;
+      }
+    }
+
+    if (isMaxDepthExceeded) {
+      return {
+        type: 'denied',
+        reason: 'max-depth-exceeded',
+        maxDepth: this.config?.maxDepth ?? DEFAULT_CONFIG.maxDepth
+      }
+    } else {
+      return {
+        type: 'denied',
+        reason: 'no-relation',
+        searchedRelations: Array.from(requiredRelations)
+      }
+    }
+  }
+
+  /**
    * アクションに必要な関係性を取得
    * @param action 権限アクション
    * @returns 必要な関係タイプの配列
@@ -491,17 +558,5 @@ export class ReBACProtectedResource {
   private findPathToResource(subject: EntityId): ExplorationResult {
     return this.explorer.findRelationPath(subject, this.resourceId);
   }
-
-  /**
-   * アクセス権限の説明を生成
-   * @param subject 主体
-   * @returns 各アクションに対する権限判定のマップ
-   */
-  explainAccess(subject: EntityId): Map<PermissionAction, ReBACDecision> {
-    // TODO: 実装してください
-    // ヒント：各PermissionActionについてcheckRelationを実行
-    throw new Error('Not implemented');
-  }
-
 }
 
