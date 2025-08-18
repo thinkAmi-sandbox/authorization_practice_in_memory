@@ -50,7 +50,6 @@ export interface PermissionRule {
 /** ReBAC設定 */
 export interface ReBACConfig {
   maxDepth: number;           // 探索の最大深度（デフォルト: 3）
-  enableCaching?: boolean;    // 探索結果のキャッシュ（オプション）
 }
 
 /** 探索状態（内部使用） */
@@ -58,14 +57,8 @@ interface SearchState {
   current: EntityId;
   path: RelationPath;
   depth: number;
-  visited: Set<EntityId>;
 }
 
-/** キャッシュエントリー（オプション） */
-interface CacheEntry {
-  path: RelationPath | null;
-  timestamp: number;
-}
 
 /** 探索結果の型 */
 export type ExplorationResult = 
@@ -97,12 +90,6 @@ export type ReBACDecision =
       type: 'denied';
       reason: 'max-depth-exceeded'; // 探索深度の制限
       maxDepth: number;
-    }
-  | {
-      type: 'denied';
-      reason: 'insufficient-permission'; // 関係は存在するが権限不足
-      path: RelationPath;        // 発見されたパス
-      relation: RelationType;    // 不十分な関係
     };
 
 // ============================================================
@@ -135,8 +122,7 @@ export const DEFAULT_PERMISSION_RULES: PermissionRule[] = [
 
 /** デフォルト設定 */
 export const DEFAULT_CONFIG: ReBACConfig = {
-  maxDepth: 3,
-  enableCaching: false
+  maxDepth: 3
 };
 
 // ============================================================
@@ -295,11 +281,12 @@ export class ReBACProtectedResource {
   checkRelation(subject: EntityId, action: PermissionAction): ReBACDecision {
     // TODO: 実装してください
     // ヒント：
-    // 1. findPathToResourceでsubjectからresourceIdへのパスを探索
-    // 2. 探索結果に応じて適切なReBACDecisionを返す：
-    //    - 'not-found' → { type: 'denied', reason: 'no-relation', searchedRelations: [] }
-    //    - 'max-depth-exceeded' → { type: 'denied', reason: 'max-depth-exceeded', maxDepth: config.maxDepth }
-    //    - 'found' → 最終関係の権限をチェックし、grantedまたはinsufficient-permissionを返す
+    // 1. getRequiredRelationsでactionに必要な関係性を取得
+    // 2. 各関係性についてfindPathToResourceでパスを探索
+    // 3. 探索結果に応じて適切なReBACDecisionを返す：
+    //    - パスが見つかった → { type: 'granted', path, relation }
+    //    - 全ての関係性で見つからない → { type: 'denied', reason: 'no-relation', searchedRelations }
+    //    - 深度制限超過 → { type: 'denied', reason: 'max-depth-exceeded', maxDepth }
     throw new Error('Not implemented');
   }
 
@@ -336,42 +323,5 @@ export class ReBACProtectedResource {
     throw new Error('Not implemented');
   }
 
-  /**
-   * パスの妥当性を検証（内部メソッド）
-   * @param path 関係性パス
-   * @param expectedRelation 期待される関係タイプ
-   * @returns パスが妥当な場合true
-   */
-  private validatePath(path: RelationPath, expectedRelation: RelationType): boolean {
-    // TODO: 実装してください（オプション）
-    // ヒント：パスが期待される関係を含むか確認
-    throw new Error('Not implemented');
-  }
 }
 
-// ============================================================
-// ヘルパー関数
-// ============================================================
-
-/**
- * 関係性パスを文字列形式で表現
- * @param path 関係性パス
- * @returns 読みやすい文字列表現
- */
-export function formatRelationPath(path: RelationPath): string {
-  // TODO: 実装してください（オプション）
-  // 例: "alice --owns--> doc1" または "alice --manages--> team --owns--> doc1"
-  throw new Error('Not implemented');
-}
-
-/**
- * ReBACDecisionを人間が読みやすい形式で説明
- * @param decision 判定結果
- * @returns 説明文字列
- */
-export function explainDecision(decision: ReBACDecision): string {
-  // TODO: 実装してください（オプション）
-  // 例: "アクセスが許可されました。パス: alice -> team -> doc"
-  //     "アクセスが拒否されました。必要な関係が見つかりません。"
-  throw new Error('Not implemented');
-}
