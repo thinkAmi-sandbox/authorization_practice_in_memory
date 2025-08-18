@@ -67,6 +67,20 @@ interface CacheEntry {
   timestamp: number;
 }
 
+/** 探索結果の型 */
+export type ExplorationResult = 
+  | {
+      type: 'found';
+      path: RelationPath;
+    }
+  | {
+      type: 'not-found';
+    }
+  | {
+      type: 'max-depth-exceeded';
+      maxDepth: number;
+    };
+
 /** ReBAC判定結果（Tagged Union） */
 export type ReBACDecision = 
   | { 
@@ -83,6 +97,12 @@ export type ReBACDecision =
       type: 'denied';
       reason: 'max-depth-exceeded'; // 探索深度の制限
       maxDepth: number;
+    }
+  | {
+      type: 'denied';
+      reason: 'insufficient-permission'; // 関係は存在するが権限不足
+      path: RelationPath;        // 発見されたパス
+      relation: RelationType;    // 不十分な関係
     };
 
 // ============================================================
@@ -229,38 +249,22 @@ export class RelationshipExplorer {
    * 関係性パスの探索（最短パスを返す）
    * @param subject 開始エンティティ
    * @param targetObject 目標エンティティ
-   * @returns 関係性パス（見つからない場合はnull）
+   * @returns 探索結果（パス発見、未発見、深度制限超過）
    */
   findRelationPath(
     subject: EntityId,
     targetObject: EntityId
-  ): RelationPath | null {
+  ): ExplorationResult {
     // TODO: 実装してください
     // ヒント：
     // 1. BFSのためのキューを初期化（SearchState型を使用）
     // 2. 訪問済みノードを管理（循環回避）
-    // 3. maxDepthで探索を制限
-    // 4. targetObjectに到達したらパスを返す
-    // 5. キューが空になったらnullを返す
+    // 3. maxDepthで探索を制限し、超過した場合は 'max-depth-exceeded' を返す
+    // 4. targetObjectに到達したら { type: 'found', path } を返す
+    // 5. キューが空になったら { type: 'not-found' } を返す
     throw new Error('Not implemented');
   }
 
-  /**
-   * 特定の関係タイプでの探索
-   * @param subject 開始エンティティ
-   * @param relation 探索する関係タイプ
-   * @param targetObject 目標エンティティ
-   * @returns 関係性パス（見つからない場合はnull）
-   */
-  findRelationPathWithType(
-    subject: EntityId,
-    relation: RelationType,
-    targetObject: EntityId
-  ): RelationPath | null {
-    // TODO: 実装してください
-    // ヒント：特定の関係タイプのみを辿る探索
-    throw new Error('Not implemented');
-  }
 }
 
 // ============================================================
@@ -291,9 +295,11 @@ export class ReBACProtectedResource {
   checkRelation(subject: EntityId, action: PermissionAction): ReBACDecision {
     // TODO: 実装してください
     // ヒント：
-    // 1. getRequiredRelationsでアクションに必要な関係を取得
-    // 2. 各関係についてfindPathToResourceで探索
-    // 3. パスが見つかったらgranted、見つからなければdeniedを返す
+    // 1. findPathToResourceでsubjectからresourceIdへのパスを探索
+    // 2. 探索結果に応じて適切なReBACDecisionを返す：
+    //    - 'not-found' → { type: 'denied', reason: 'no-relation', searchedRelations: [] }
+    //    - 'max-depth-exceeded' → { type: 'denied', reason: 'max-depth-exceeded', maxDepth: config.maxDepth }
+    //    - 'found' → 最終関係の権限をチェックし、grantedまたはinsufficient-permissionを返す
     throw new Error('Not implemented');
   }
 
@@ -311,15 +317,11 @@ export class ReBACProtectedResource {
   /**
    * リソースへのパスを探索（内部メソッド）
    * @param subject 主体
-   * @param relation 関係タイプ
-   * @returns 関係性パス（見つからない場合はnull）
+   * @returns 探索結果
    */
-  private findPathToResource(
-    subject: EntityId,
-    relation: RelationType
-  ): RelationPath | null {
+  private findPathToResource(subject: EntityId): ExplorationResult {
     // TODO: 実装してください
-    // ヒント：explorerを使ってresourceIdへのパスを探索
+    // ヒント：explorerのfindRelationPathを使ってresourceIdへのパスを探索
     throw new Error('Not implemented');
   }
 
