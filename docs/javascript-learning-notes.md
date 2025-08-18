@@ -279,3 +279,310 @@ getRelations(subject: EntityId, relation?: RelationType): ReadonlyArray<Relation
 - [MDN: Array.from()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/from)
 - [MDN: for...of statement](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/for...of)
 - [JavaScript Performance Best Practices](https://web.dev/fast/)
+
+## 7. ネストしたMap/Set構造の安全な操作
+
+### 7.1 Nullish Coalescingを使った初期化パターン
+
+#### 問題の背景
+
+ネストしたMap/Set構造に値を追加する際、以下の課題が発生します：
+
+- **Non-null assertion (`!`)の使用**：型安全性が保証されない
+- **繰り返しのundefinedチェック**：コードの可読性低下
+- **初期化の複雑さ**：多段階のネスト構造での値追加
+
+#### アンチパターン：Non-null Assertionの多用
+
+```typescript
+// ❌ 型安全性に問題あり
+const innerMap = outerMap.get(key1)!; // `!` に依存
+const valueSet = innerMap.get(key2)!; // `!` に依存
+valueSet.add(value);
+```
+
+**問題点：**
+- 実際に`undefined`の場合にランタイムエラー
+- TypeScriptの型チェックを無効化
+- デバッグが困難
+
+#### 解決策：Nullish Coalescingパターン
+
+```typescript
+// ✅ 型安全で明確なパターン
+const innerMap = outerMap.get(key1) ?? new Map();
+if (!outerMap.has(key1)) {
+  outerMap.set(key1, innerMap);
+}
+
+const valueSet = innerMap.get(key2) ?? new Set();
+if (!innerMap.has(key2)) {
+  innerMap.set(key2, valueSet);
+}
+valueSet.add(value);
+```
+
+**利点：**
+- **型安全性**：`!`を使わずに型チェックが通る
+- **Immutability**：すべての変数を`const`で宣言可能
+- **明確性**：各ステップの処理が明示的
+- **予測可能性**：既存オブジェクトの再利用または新規作成が明確
+
+### 7.2 参照型の理解と不要な再設定の回避
+
+#### よくある間違い：参照型の再設定
+
+```typescript
+// ❌ 不要な再設定（アンチパターン）
+const innerMap = outerMap.get(key);
+if (!innerMap) {
+  outerMap.set(key, new Map([['subKey', new Set(['value'])]]));
+} else {
+  const valueSet = innerMap.get('subKey') || new Set();
+  valueSet.add('value');
+  innerMap.set('subKey', valueSet);
+  outerMap.set(key, innerMap); // 不要な再設定！
+}
+```
+
+#### 正しいパターン：参照の活用
+
+```typescript
+// ✅ 参照型の性質を理解した実装
+const innerMap = outerMap.get(key) ?? new Map();
+if (!outerMap.has(key)) {
+  outerMap.set(key, innerMap); // 新規作成時のみ設定
+}
+
+const valueSet = innerMap.get('subKey') ?? new Set();
+if (!innerMap.has('subKey')) {
+  innerMap.set('subKey', valueSet); // 新規作成時のみ設定
+}
+valueSet.add('value'); // 既存Setへの直接操作、再設定不要
+```
+
+**重要なポイント：**
+- `Map`と`Set`はJavaScriptの**参照型**
+- 一度設定したオブジェクトは、内容を変更しても再設定不要
+- 不要な`set`呼び出しはパフォーマンスに悪影響
+
+### 7.3 TypeScriptでの型安全な実装パターン比較
+
+#### パターン1：Non-null Assertion (`!`)
+
+```typescript
+// 簡潔だが危険
+const innerMap = outerMap.get(key)!;
+innerMap.get(subKey)!.add(value);
+```
+
+| 項目 | 評価 | 説明 |
+|------|------|------|
+| 簡潔性 | ⭐⭐⭐ | 最もコードが短い |
+| 型安全性 | ❌ | ランタイムエラーの可能性 |
+| デバッグ性 | ❌ | エラー箇所の特定が困難 |
+| 保守性 | ❌ | 将来の変更で問題が起きやすい |
+
+#### パターン2：Nullish Coalescing (`??`)
+
+```typescript
+// バランスの取れたアプローチ
+const innerMap = outerMap.get(key) ?? new Map();
+if (!outerMap.has(key)) {
+  outerMap.set(key, innerMap);
+}
+```
+
+| 項目 | 評価 | 説明 |
+|------|------|------|
+| 簡潔性 | ⭐⭐ | 適度な長さ |
+| 型安全性 | ⭐⭐⭐ | TypeScriptが完全に型チェック |
+| デバッグ性 | ⭐⭐⭐ | 各ステップが明確 |
+| 保守性 | ⭐⭐⭐ | 拡張しやすい |
+
+#### パターン3：Let変数での再代入
+
+```typescript
+// 明示的だがmutable
+let innerMap = outerMap.get(key);
+if (!innerMap) {
+  innerMap = new Map();
+  outerMap.set(key, innerMap);
+}
+```
+
+| 項目 | 評価 | 説明 |
+|------|------|------|
+| 簡潔性 | ⭐⭐ | 中程度の長さ |
+| 型安全性 | ⭐⭐⭐ | 型安全 |
+| デバッグ性 | ⭐⭐ | 変数の状態変化を追跡必要 |
+| 保守性 | ⭐⭐ | mutableな変数は変更を追いにくい |
+
+### 7.4 使い分けの指針
+
+| 使用場面 | 推奨パターン | 理由 |
+|---------|-------------|------|
+| **本番コード** | Nullish Coalescing | 型安全性とバランス |
+| **プロトタイピング** | Let変数 | 素早い実装 |
+| **絶対に存在が保証される場合** | Non-null Assertion | パフォーマンス重視（要注意） |
+| **複雑な条件分岐** | Let変数 + 早期リターン | 可読性重視 |
+| **関数型プログラミング** | Nullish Coalescing | Immutability維持 |
+
+## 8. 実践例：階層的データ構造の管理
+
+### 8.1 実世界の例：カテゴリー・タグ・アイテム管理
+
+```typescript
+interface Item {
+  id: string;
+  name: string;
+}
+
+/**
+ * 3層のネスト構造：Category → Tag → Items
+ * Map<Category, Map<Tag, Set<ItemId>>>
+ */
+class ItemOrganizer {
+  private items = new Map<string, Map<string, Set<string>>>();
+
+  /**
+   * アイテムをカテゴリーとタグで分類
+   */
+  addItem(category: string, tag: string, itemId: string): void {
+    // Nullish coalescingパターンで安全に追加
+    const categoryMap = this.items.get(category) ?? new Map<string, Set<string>>();
+    if (!this.items.has(category)) {
+      this.items.set(category, categoryMap);
+    }
+    
+    const tagSet = categoryMap.get(tag) ?? new Set<string>();
+    if (!categoryMap.has(tag)) {
+      categoryMap.set(tag, tagSet);
+    }
+    tagSet.add(itemId);
+  }
+
+  /**
+   * アイテムの削除（クリーンアップ付き）
+   */
+  removeItem(category: string, tag: string, itemId: string): boolean {
+    const categoryMap = this.items.get(category);
+    if (!categoryMap) return false;
+
+    const tagSet = categoryMap.get(tag);
+    if (!tagSet) return false;
+
+    const removed = tagSet.delete(itemId);
+    
+    // クリーンアップ：空になったSetやMapを削除
+    if (tagSet.size === 0) {
+      categoryMap.delete(tag);
+      
+      if (categoryMap.size === 0) {
+        this.items.delete(category);
+      }
+    }
+    
+    return removed;
+  }
+
+  /**
+   * 特定カテゴリー・タグのアイテム一覧を取得
+   */
+  getItems(category: string, tag?: string): string[] {
+    const categoryMap = this.items.get(category);
+    if (!categoryMap) return [];
+
+    if (tag) {
+      const tagSet = categoryMap.get(tag);
+      return tagSet ? Array.from(tagSet) : [];
+    }
+
+    // 全タグのアイテムを収集
+    const allItems = new Set<string>();
+    for (const tagSet of categoryMap.values()) {
+      for (const item of tagSet) {
+        allItems.add(item);
+      }
+    }
+    return Array.from(allItems);
+  }
+}
+```
+
+### 8.2 パフォーマンスと保守性の考慮
+
+#### メモリ効率的な初期化
+
+```typescript
+// ✅ 推奨：必要時にのみオブジェクトを作成
+addItem(category: string, tag: string, itemId: string): void {
+  const categoryMap = this.items.get(category) ?? new Map();
+  if (!this.items.has(category)) {
+    this.items.set(category, categoryMap);
+  }
+  // ... 以下同様
+}
+
+// ❌ 非効率：常に新しいオブジェクトを作成
+addItem(category: string, tag: string, itemId: string): void {
+  const categoryMap = this.items.get(category) ?? this.createNewMap();
+  // createNewMapが毎回呼び出される
+}
+```
+
+#### デバッグ支援の追加
+
+```typescript
+addItem(category: string, tag: string, itemId: string): void {
+  console.debug(`Adding item ${itemId} to ${category}:${tag}`);
+  
+  const categoryMap = this.items.get(category) ?? new Map();
+  if (!this.items.has(category)) {
+    console.debug(`Creating new category: ${category}`);
+    this.items.set(category, categoryMap);
+  }
+  
+  const tagSet = categoryMap.get(tag) ?? new Set();
+  if (!categoryMap.has(tag)) {
+    console.debug(`Creating new tag: ${tag} in ${category}`);
+    categoryMap.set(tag, tagSet);
+  }
+  
+  tagSet.add(itemId);
+  console.debug(`Current category size: ${categoryMap.size}`);
+}
+```
+
+### 8.3 学習ポイントまとめ
+
+#### 重要な概念
+
+1. **Nullish Coalescingの効果的な活用**
+   - 型安全性の確保
+   - 不要なオブジェクト作成の最小化
+   - コードの可読性向上
+
+2. **参照型の深い理解**
+   - Map/Setの内容変更時に再設定は不要
+   - オブジェクトの同一性vs内容の変更の区別
+   - メモリ効率への影響
+
+3. **段階的な構造の初期化**
+   - ネストの各レベルでの適切な初期化
+   - 存在チェックと作成の分離
+   - クリーンアップ処理の重要性
+
+#### 実践での応用
+
+- **データベース風の構造**: テーブル → インデックス → レコード
+- **キャッシュシステム**: 名前空間 → キー → 値
+- **権限管理**: ユーザー → ロール → 権限
+- **グラフ構造**: ノード → エッジタイプ → 隣接ノード
+
+## 9. 追加参考資料
+
+- [MDN: Nullish coalescing operator (??)](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Nullish_coalescing_operator)
+- [MDN: Map](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map)
+- [MDN: Set](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set)
+- [TypeScript Deep Dive: Non-null Assertion](https://basarat.gitbook.io/typescript/intro-1/non-null-assertion-operator)

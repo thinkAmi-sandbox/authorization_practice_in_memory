@@ -150,25 +150,29 @@ export class RelationGraph {
    * @param tuple 追加する関係性タプル
    */
   addRelation(tuple: RelationTuple): void {
-    const relations = this.adjacencyList.get(tuple.subject)
-    if (!relations) {
-      this.adjacencyList.set(tuple.subject, new Map([[tuple.relation, new Set([tuple.object])]]))
-    } else {
-      const objects = relations.get(tuple.relation) || new Set()
-      objects.add(tuple.object)
-      relations.set(tuple.relation, objects)
-      this.adjacencyList.set(tuple.subject, relations)
+    // 順方向: subject -> relation -> objects
+    const subjectRelations = this.adjacencyList.get(tuple.subject) ?? new Map();
+    if (!this.adjacencyList.has(tuple.subject)) {
+      this.adjacencyList.set(tuple.subject, subjectRelations);
     }
+    
+    const relationObjects = subjectRelations.get(tuple.relation) ?? new Set();
+    if (!subjectRelations.has(tuple.relation)) {
+      subjectRelations.set(tuple.relation, relationObjects);
+    }
+    relationObjects.add(tuple.object);
 
-    const reverseRelations = this.reverseAdjacencyList.get(tuple.object)
-    if (!reverseRelations) {
-      this.reverseAdjacencyList.set(tuple.object, new Map([[tuple.relation, new Set([tuple.subject])]]))
-    } else {
-      const subjects = reverseRelations.get(tuple.relation) || new Set()
-      subjects.add(tuple.subject)
-      reverseRelations.set(tuple.relation, subjects)
-      this.reverseAdjacencyList.set(tuple.object, reverseRelations)
+    // 逆方向: object -> relation -> subjects
+    const objectRelations = this.reverseAdjacencyList.get(tuple.object) ?? new Map();
+    if (!this.reverseAdjacencyList.has(tuple.object)) {
+      this.reverseAdjacencyList.set(tuple.object, objectRelations);
     }
+    
+    const relationSubjects = objectRelations.get(tuple.relation) ?? new Set();
+    if (!objectRelations.has(tuple.relation)) {
+      objectRelations.set(tuple.relation, relationSubjects);
+    }
+    relationSubjects.add(tuple.subject);
   }
 
   /**
