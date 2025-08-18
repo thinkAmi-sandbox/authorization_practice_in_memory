@@ -150,11 +150,6 @@ export class RelationGraph {
    * @param tuple 追加する関係性タプル
    */
   addRelation(tuple: RelationTuple): void {
-    // TODO: 実装してください
-    // ヒント：
-    // 1. adjacencyListに関係を追加
-    // 2. reverseAdjacencyListにも逆方向の関係を追加
-    // 3. 必要に応じてMapやSetを初期化
     const relations = this.adjacencyList.get(tuple.subject)
     if (!relations) {
       this.adjacencyList.set(tuple.subject, new Map([[tuple.relation, new Set([tuple.object])]]))
@@ -163,6 +158,16 @@ export class RelationGraph {
       objects.add(tuple.object)
       relations.set(tuple.relation, objects)
       this.adjacencyList.set(tuple.subject, relations)
+    }
+
+    const reverseRelations = this.reverseAdjacencyList.get(tuple.object)
+    if (!reverseRelations) {
+      this.reverseAdjacencyList.set(tuple.object, new Map([[tuple.relation, new Set([tuple.subject])]]))
+    } else {
+      const subjects = reverseRelations.get(tuple.relation) || new Set()
+      subjects.add(tuple.subject)
+      reverseRelations.set(tuple.relation, subjects)
+      this.reverseAdjacencyList.set(tuple.object, reverseRelations)
     }
   }
 
@@ -233,9 +238,33 @@ export class RelationGraph {
    * @returns 関係性タプルの配列
    */
   getReverseRelations(object: EntityId, relation?: RelationType): RelationTuple[] {
-    // TODO: 実装してください
-    // ヒント：reverseAdjacencyListから関係を取得し、RelationTuple形式に変換
-    throw new Error('Not implemented');
+    const relations = this.reverseAdjacencyList.get(object);
+    if (!relations) return [];
+
+    // 特定の関係タイプが指定された場合
+    if (relation) {
+      const subjects = relations.get(relation);
+      if (!subjects) return [];
+
+      return Array.from(subjects, subject => ({
+        subject,
+        relation,
+        object
+      }));
+    }
+
+    // すべての関係を返す場合
+    const tuples: RelationTuple[] = [];
+    for (const [relation, subjects] of relations) {
+      for (const subject of subjects) {
+        tuples.push({
+          subject,
+          relation,
+          object
+        });
+      }
+    }
+    return tuples;
   }
 
   /**
