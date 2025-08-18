@@ -134,15 +134,15 @@ export const DEFAULT_CONFIG: ReBACConfig = {
  * 隣接リストによる効率的なグラフ表現を実装
  */
 export class RelationGraph {
-  // subject -> relation -> objects のマッピング
+  // 順方向の隣接リスト (subject -> relation -> objects)
   private adjacencyList: Map<EntityId, Map<RelationType, Set<EntityId>>>;
   
-  // 逆方向の索引（object -> relation -> subjects）
-  private reverseIndex: Map<EntityId, Map<RelationType, Set<EntityId>>>;
+  // 逆方向の隣接リスト（object -> relation -> subjects）
+  private reverseAdjacencyList: Map<EntityId, Map<RelationType, Set<EntityId>>>;
 
   constructor() {
     this.adjacencyList = new Map();
-    this.reverseIndex = new Map();
+    this.reverseAdjacencyList = new Map();
   }
 
   /**
@@ -153,7 +153,7 @@ export class RelationGraph {
     // TODO: 実装してください
     // ヒント：
     // 1. adjacencyListに関係を追加
-    // 2. reverseIndexにも逆方向の関係を追加
+    // 2. reverseAdjacencyListにも逆方向の関係を追加
     // 3. 必要に応じてMapやSetを初期化
     const relations = this.adjacencyList.get(tuple.subject)
     if (!relations) {
@@ -174,7 +174,7 @@ export class RelationGraph {
     // TODO: 実装してください
     // ヒント：
     // 1. adjacencyListから関係を削除
-    // 2. reverseIndexからも削除
+    // 2. reverseAdjacencyListからも削除
     // 3. 空になったMapやSetをクリーンアップ
     throw new Error('Not implemented');
   }
@@ -234,7 +234,7 @@ export class RelationGraph {
    */
   getReverseRelations(object: EntityId, relation?: RelationType): RelationTuple[] {
     // TODO: 実装してください
-    // ヒント：reverseIndexから関係を取得し、RelationTuple形式に変換
+    // ヒント：reverseAdjacencyListから関係を取得し、RelationTuple形式に変換
     throw new Error('Not implemented');
   }
 
