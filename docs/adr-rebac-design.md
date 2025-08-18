@@ -1824,6 +1824,124 @@ describe('ReBACProtectedResource', () => {
 })
 ```
 
+#### 8.1.4 アサーションパターンの使い分け
+
+ReBAC学習用実装では、テストの可読性と保守性を重視し、`toEqual`と`toMatchObject`を適切に使い分けています。
+
+##### 8.1.4.1 `toEqual`の使用ケース（厳密な一致検証）
+
+**決定論的な結果のテスト:**
+```typescript
+// 直接関係（1ホップ）のテスト
+expect(result).toEqual({
+  type: 'found',
+  path: [{ subject: 'alice', relation: 'owns', object: 'doc1' }]
+})
+
+// 間接関係（2ホップ）のテスト
+expect(result).toEqual({
+  type: 'found', 
+  path: [relation1, relation2]  // 順序が保証されている
+})
+
+// エラーケースのテスト
+expect(result).toEqual({
+  type: 'not-found'
+})
+
+expect(result).toEqual({
+  type: 'max-depth-exceeded',
+  maxDepth: 2
+})
+```
+
+**`toEqual`を選ぶ理由:**
+- **実装に関係なく結果が一意**: BFSによる最短パス探索では結果が決定論的
+- **順序が重要**: パスの順序（関係の連鎖）は権限の根拠として意味がある
+- **完全一致が必要**: オブジェクトの全プロパティが予測可能
+
+##### 8.1.4.2 `toMatchObject`の使用ケース（部分一致検証）
+
+**実装依存の詳細を含む結果のテスト:**
+```typescript
+// 3ホップ以上の複雑なパス
+expect(result).toMatchObject({
+  type: 'granted',
+  relation: 'owns',
+  path: expect.arrayContaining([relation1, relation2, relation3])
+})
+
+// searchedRelationsプロパティのテスト
+expect(result).toMatchObject({
+  type: 'denied',
+  reason: 'no-relation',
+  searchedRelations: expect.arrayContaining(['owns', 'editor'])
+})
+
+// 最小限の検証で十分な場合
+expect(accessMap.get('read')).toMatchObject({
+  type: 'granted'  // 他のプロパティは検証不要
+})
+```
+
+**`toMatchObject`を選ぶ理由:**
+- **探索順序の非決定性**: 実装によって関係性の検索順序が変わる可能性
+- **配列の完全性が不明**: 他の関係も含まれている可能性がある
+- **部分検証で十分**: 特定のプロパティのみ重要な場合
+
+##### 8.1.4.3 判断基準の明確化
+
+| 条件 | 使用マッチャー | 理由 |
+|------|---------------|------|
+| **直接関係（1ホップ）** | `toEqual` | 結果が常に同じ |
+| **2ホップの間接関係** | `toEqual` | BFSで順序が保証される |
+| **3ホップ以上の複雑パス** | `toMatchObject` + `arrayContaining` | 実装による順序の違いを許容 |
+| **エラーケース** | `toEqual` | エラー内容は決定論的 |
+| **検索した関係リスト** | `toMatchObject` + `arrayContaining` | 検索順序は実装依存 |
+| **最小限の検証** | `toMatchObject` | 必要なプロパティのみ確認 |
+
+##### 8.1.4.4 学習効果への配慮
+
+この使い分けにより、以下の学習効果を実現：
+
+**1. テストの実装自由度の確保**
+```typescript
+// 学習者の実装方法に関係なく、仕様を満たしていればテストが通る
+// グラフ探索の詳細実装が異なっても、最短パスを見つける機能は検証される
+```
+
+**2. 重要な仕様の明確化**
+```typescript
+// toEqualで厳密にテストされる部分 = 必ず実装すべき仕様
+// toMatchObjectで部分的にテストされる部分 = 実装の自由度がある部分
+```
+
+**3. 実システムでの考慮事項の学習**
+```typescript
+// 実際のReBACシステムでは探索順序や最適化手法によって
+// 結果の詳細が変わることを暗示的に学習
+```
+
+##### 8.1.4.5 型安全性の維持
+
+```typescript
+// TypeScriptの型ガードを使わない安全なアサーション
+expect(result).toEqual({
+  type: 'granted',
+  relation: 'owns',
+  path: [relation]
+} as ReBACDecision)  // 型注釈で安全性を確保
+
+// Union型の各ケースを適切にテスト
+expect(result.type).toBe('granted')  // 型を絞り込み
+expect(result).toMatchObject({       // 絞り込み後のプロパティを検証
+  relation: 'owns',
+  path: expect.any(Array)
+})
+```
+
+この設計により、テストコードの可読性と保守性を確保しながら、学習者の実装の自由度を適切に保つことができます。
+
 ### 8.2 統合テスト
 
 #### 8.2.1 実世界シナリオのテスト

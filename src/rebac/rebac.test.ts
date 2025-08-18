@@ -201,11 +201,10 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           const explorer = new RelationshipExplorer(graph);
           const result = explorer.findRelationPath('user1', 'doc1');
           
-          expect(result.type).toBe('found');
-          if (result.type === 'found') {
-            expect(result.path.length).toBe(1);
-            expect(result.path[0]).toEqual(relation);
-          }
+          expect(result).toEqual({
+            type: 'found',
+            path: [relation]
+          });
         })
         it('間接関係（2ホップ）のパスを返すこと', () => {
           const graph = new RelationGraph();
@@ -226,12 +225,10 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           const explorer = new RelationshipExplorer(graph);
           const result = explorer.findRelationPath('user1', 'doc1');
           
-          expect(result.type).toBe('found');
-          if (result.type === 'found') {
-            expect(result.path.length).toBe(2);
-            expect(result.path[0]).toEqual(relation1);
-            expect(result.path[1]).toEqual(relation2);
-          }
+          expect(result).toEqual({
+            type: 'found',
+            path: [relation1, relation2]
+          });
         })
         it('間接関係（3ホップ）のパスを返すこと', () => {
           const graph = new RelationGraph();
@@ -258,20 +255,19 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           const explorer = new RelationshipExplorer(graph);
           const result = explorer.findRelationPath('user1', 'doc1');
           
-          expect(result.type).toBe('found');
-          if (result.type === 'found') {
-            expect(result.path.length).toBe(3);
-            expect(result.path[0]).toEqual(relation1);
-            expect(result.path[1]).toEqual(relation2);
-            expect(result.path[2]).toEqual(relation3);
-          }
+          expect(result).toEqual({
+            type: 'found',
+            path: [relation1, relation2, relation3]
+          });
         })
         it('関係が存在しない場合not-foundを返すこと', () => {
           const graph = new RelationGraph();
           const explorer = new RelationshipExplorer(graph);
           const result = explorer.findRelationPath('user1', 'doc1');
           
-          expect(result.type).toBe('not-found');
+          expect(result).toEqual({
+            type: 'not-found'
+          });
         })
       })
       
@@ -303,11 +299,10 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           const explorer = new RelationshipExplorer(graph);
           const result = explorer.findRelationPath('user1', 'doc1');
           
-          expect(result.type).toBe('found');
-          if (result.type === 'found') {
-            expect(result.path.length).toBe(1);
-            expect(result.path[0]).toEqual(directRelation);
-          }
+          expect(result).toEqual({
+            type: 'found',
+            path: [directRelation]
+          });
         })
       })
       
@@ -331,10 +326,10 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           const explorer = new RelationshipExplorer(graph, { maxDepth: 3 });
           const result = explorer.findRelationPath('user1', 'doc1');
           
-          expect(result.type).toBe('found');
-          if (result.type === 'found') {
-            expect(result.path.length).toBe(2);
-          }
+          expect(result).toEqual({
+            type: 'found',
+            path: [relation1, relation2]
+          });
         })
         it('maxDepthを超える場合max-depth-exceededを返すこと', () => {
           const graph = new RelationGraph();
@@ -361,10 +356,10 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           const explorer = new RelationshipExplorer(graph, { maxDepth: 2 });
           const result = explorer.findRelationPath('user1', 'doc1');
           
-          expect(result.type).toBe('max-depth-exceeded');
-          if (result.type === 'max-depth-exceeded') {
-            expect(result.maxDepth).toBe(2);
-          }
+          expect(result).toEqual({
+            type: 'max-depth-exceeded',
+            maxDepth: 2
+          });
         })
       })
       
@@ -395,11 +390,10 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           const explorer = new RelationshipExplorer(graph);
           const result = explorer.findRelationPath('user1', 'doc1');
           
-          expect(result.type).toBe('found');
-          if (result.type === 'found') {
-            expect(result.path.length).toBe(1);
-            expect(result.path[0]).toEqual(relation3);
-          }
+          expect(result).toEqual({
+            type: 'found',
+            path: [relation3]
+          });
         })
       })
     })
@@ -415,12 +409,11 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           
           const result = resource.checkRelation('user1', 'read');
           
-          expect(result.type).toBe('denied');
-          if (result.type === 'denied' && result.reason === 'no-relation') {
-            expect(result.searchedRelations).toContain('owns');
-            expect(result.searchedRelations).toContain('editor');
-            expect(result.searchedRelations).toContain('viewer');
-          }
+          expect(result).toMatchObject({
+            type: 'denied',
+            reason: 'no-relation',
+            searchedRelations: expect.arrayContaining(['owns', 'editor', 'viewer'])
+          });
         })
       })
       
@@ -437,12 +430,11 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           const resource = new ReBACProtectedResource('doc1', graph);
           const result = resource.checkRelation('user1', 'read');
           
-          expect(result.type).toBe('granted');
-          if (result.type === 'granted') {
-            expect(result.relation).toBe('owns');
-            expect(result.path.length).toBe(1);
-            expect(result.path[0]).toEqual(relation);
-          }
+          expect(result).toEqual({
+            type: 'granted',
+            relation: 'owns',
+            path: [relation]
+          });
         })
         it('editor関係で読み取り可能', () => {
           const graph = new RelationGraph();
@@ -456,12 +448,11 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           const resource = new ReBACProtectedResource('doc1', graph);
           const result = resource.checkRelation('user1', 'read');
           
-          expect(result.type).toBe('granted');
-          if (result.type === 'granted') {
-            expect(result.relation).toBe('editor');
-            expect(result.path.length).toBe(1);
-            expect(result.path[0]).toEqual(relation);
-          }
+          expect(result).toEqual({
+            type: 'granted',
+            relation: 'editor',
+            path: [relation]
+          });
         })
         it('viewer関係で読み取り可能', () => {
           const graph = new RelationGraph();
@@ -475,12 +466,11 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           const resource = new ReBACProtectedResource('doc1', graph);
           const result = resource.checkRelation('user1', 'read');
           
-          expect(result.type).toBe('granted');
-          if (result.type === 'granted') {
-            expect(result.relation).toBe('viewer');
-            expect(result.path.length).toBe(1);
-            expect(result.path[0]).toEqual(relation);
-          }
+          expect(result).toEqual({
+            type: 'granted',
+            relation: 'viewer',
+            path: [relation]
+          });
         })
       })
       
@@ -504,13 +494,11 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           const resource = new ReBACProtectedResource('doc1', graph);
           const result = resource.checkRelation('user1', 'read');
           
-          expect(result.type).toBe('granted');
-          if (result.type === 'granted') {
-            expect(result.relation).toBe('editor');
-            expect(result.path.length).toBe(2);
-            expect(result.path[0]).toEqual(relation1);
-            expect(result.path[1]).toEqual(relation2);
-          }
+          expect(result).toEqual({
+            type: 'granted',
+            relation: 'editor',
+            path: [relation1, relation2]
+          });
         })
         it('マネージャー→チーム→メンバー→ドキュメントで読み取り可能', () => {
           const graph = new RelationGraph();
@@ -537,16 +525,46 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           const resource = new ReBACProtectedResource('doc1', graph);
           const result = resource.checkRelation('manager1', 'read');
           
-          expect(result.type).toBe('granted');
-          if (result.type === 'granted') {
-            expect(result.relation).toBe('owns');
-            expect(result.path.length).toBe(3);
-          }
+          expect(result).toMatchObject({
+            type: 'granted',
+            relation: 'owns',
+            path: expect.arrayContaining([relation1, relation2, relation3])
+          });
         })
       })
       
       describe('深度制限の影響', () => {
-        it('深度制限を超える場合、max-depth-exceededで拒否', () => {})
+        it('深度制限を超える場合、max-depth-exceededで拒否', () => {
+          const graph = new RelationGraph();
+          const relation1: RelationTuple = {
+            subject: 'user1',
+            relation: 'memberOf',
+            object: 'team1'
+          };
+          const relation2: RelationTuple = {
+            subject: 'team1',
+            relation: 'memberOf',
+            object: 'org1'
+          };
+          const relation3: RelationTuple = {
+            subject: 'org1',
+            relation: 'owns',
+            object: 'doc1'
+          };
+          
+          graph.addRelation(relation1);
+          graph.addRelation(relation2);
+          graph.addRelation(relation3);
+          
+          const resource = new ReBACProtectedResource('doc1', graph, DEFAULT_PERMISSION_RULES, { maxDepth: 2 });
+          const result = resource.checkRelation('user1', 'read');
+          
+          expect(result).toEqual({
+            type: 'denied',
+            reason: 'max-depth-exceeded',
+            maxDepth: 2
+          });
+        })
       })
     })
     
@@ -558,11 +576,11 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           
           const result = resource.checkRelation('user1', 'write');
           
-          expect(result.type).toBe('denied');
-          if (result.type === 'denied' && result.reason === 'no-relation') {
-            expect(result.searchedRelations).toContain('owns');
-            expect(result.searchedRelations).toContain('editor');
-          }
+          expect(result).toMatchObject({
+            type: 'denied',
+            reason: 'no-relation',
+            searchedRelations: expect.arrayContaining(['owns', 'editor'])
+          });
         })
       })
       
@@ -579,12 +597,11 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           const resource = new ReBACProtectedResource('doc1', graph);
           const result = resource.checkRelation('user1', 'write');
           
-          expect(result.type).toBe('granted');
-          if (result.type === 'granted') {
-            expect(result.relation).toBe('owns');
-            expect(result.path.length).toBe(1);
-            expect(result.path[0]).toEqual(relation);
-          }
+          expect(result).toEqual({
+            type: 'granted',
+            relation: 'owns',
+            path: [relation]
+          });
         })
         it('editor関係で書き込み可能', () => {
           const graph = new RelationGraph();
@@ -598,12 +615,11 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           const resource = new ReBACProtectedResource('doc1', graph);
           const result = resource.checkRelation('user1', 'write');
           
-          expect(result.type).toBe('granted');
-          if (result.type === 'granted') {
-            expect(result.relation).toBe('editor');
-            expect(result.path.length).toBe(1);
-            expect(result.path[0]).toEqual(relation);
-          }
+          expect(result).toEqual({
+            type: 'granted',
+            relation: 'editor',
+            path: [relation]
+          });
         })
         it('viewer関係で書き込み不可（権限の違いを学習）', () => {
           const graph = new RelationGraph();
@@ -617,11 +633,11 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           const resource = new ReBACProtectedResource('doc1', graph);
           const result = resource.checkRelation('user1', 'write');
           
-          expect(result.type).toBe('denied');
-          if (result.type === 'denied' && result.reason === 'no-relation') {
-            expect(result.searchedRelations).toContain('owns');
-            expect(result.searchedRelations).toContain('editor');
-          }
+          expect(result).toMatchObject({
+            type: 'denied',
+            reason: 'no-relation',
+            searchedRelations: expect.arrayContaining(['owns', 'editor'])
+          });
         })
       })
       
@@ -645,13 +661,11 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           const resource = new ReBACProtectedResource('doc1', graph);
           const result = resource.checkRelation('user1', 'write');
           
-          expect(result.type).toBe('granted');
-          if (result.type === 'granted') {
-            expect(result.relation).toBe('editor');
-            expect(result.path.length).toBe(2);
-            expect(result.path[0]).toEqual(relation1);
-            expect(result.path[1]).toEqual(relation2);
-          }
+          expect(result).toEqual({
+            type: 'granted',
+            relation: 'editor',
+            path: [relation1, relation2]
+          });
         })
         it('マネージャー→チーム→メンバー→ドキュメントで書き込み可能', () => {
           const graph = new RelationGraph();
@@ -678,11 +692,11 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           const resource = new ReBACProtectedResource('doc1', graph);
           const result = resource.checkRelation('manager1', 'write');
           
-          expect(result.type).toBe('granted');
-          if (result.type === 'granted') {
-            expect(result.relation).toBe('owns');
-            expect(result.path.length).toBe(3);
-          }
+          expect(result).toMatchObject({
+            type: 'granted',
+            relation: 'owns',
+            path: expect.arrayContaining([relation1, relation2, relation3])
+          });
         })
         it('パスの各ステップが正しく記録されること', () => {
           const graph = new RelationGraph();
@@ -703,10 +717,11 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           const resource = new ReBACProtectedResource('doc1', graph);
           const result = resource.checkRelation('user1', 'write');
           
-          expect(result.type).toBe('granted');
-          if (result.type === 'granted') {
-            expect(result.path).toEqual([relation1, relation2]);
-          }
+          expect(result).toEqual({
+            type: 'granted',
+            relation: 'owns',
+            path: [relation1, relation2]
+          });
         })
       })
       
@@ -736,10 +751,11 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           const resource = new ReBACProtectedResource('doc1', graph, DEFAULT_PERMISSION_RULES, { maxDepth: 2 });
           const result = resource.checkRelation('user1', 'write');
           
-          expect(result.type).toBe('denied');
-          if (result.type === 'denied' && result.reason === 'max-depth-exceeded') {
-            expect(result.maxDepth).toBe(2);
-          }
+          expect(result).toEqual({
+            type: 'denied',
+            reason: 'max-depth-exceeded',
+            maxDepth: 2
+          });
         })
       })
     })
@@ -783,11 +799,12 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
         expect(accessMap.has('read')).toBe(true);
         expect(accessMap.has('write')).toBe(true);
         
-        const readResult = accessMap.get('read');
-        const writeResult = accessMap.get('write');
-        
-        expect(readResult?.type).toBe('granted');
-        expect(writeResult?.type).toBe('granted');
+        expect(accessMap.get('read')).toMatchObject({
+          type: 'granted'
+        });
+        expect(accessMap.get('write')).toMatchObject({
+          type: 'granted'
+        });
       })
       it('複数のアクションで異なる判定結果を返すこと', () => {
         const graph = new RelationGraph();
@@ -801,11 +818,12 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
         const resource = new ReBACProtectedResource('doc1', graph);
         const accessMap = resource.explainAccess('user1');
         
-        const readResult = accessMap.get('read');
-        const writeResult = accessMap.get('write');
-        
-        expect(readResult?.type).toBe('granted');
-        expect(writeResult?.type).toBe('denied');
+        expect(accessMap.get('read')).toMatchObject({
+          type: 'granted'
+        });
+        expect(accessMap.get('write')).toMatchObject({
+          type: 'denied'
+        });
       })
     })
   })
