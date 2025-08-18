@@ -308,6 +308,38 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
         })
       })
       
+      describe('同一エンティティの探索', () => {
+        it('subjectとtargetObjectが同じ場合、空のパスを返すこと', () => {
+          const graph = new RelationGraph();
+          const explorer = new RelationshipExplorer(graph);
+          
+          const result = explorer.findRelationPath('user1', 'user1');
+          
+          expect(result).toEqual({
+            type: 'found',
+            path: []
+          });
+        })
+        
+        it('自己参照の関係がある場合でも空のパスを返すこと', () => {
+          const graph = new RelationGraph();
+          // 自己参照の関係を追加
+          graph.addRelation({
+            subject: 'group1',
+            relation: 'manages',
+            object: 'group1'
+          });
+          
+          const explorer = new RelationshipExplorer(graph);
+          const result = explorer.findRelationPath('group1', 'group1');
+          
+          expect(result).toEqual({
+            type: 'found',
+            path: []
+          });
+        })
+      })
+      
       describe('最短パス保証', () => {
         it('複数パスが存在する場合、最短パスを返すこと', () => {
           const graph = new RelationGraph();

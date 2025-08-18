@@ -327,6 +327,11 @@ export class RelationshipExplorer {
     subject: EntityId,
     targetObject: EntityId
   ): ExplorationResult {
+    // 早期チェック：同一エンティティの場合
+    if (subject === targetObject) {
+      return { type: 'found', path: [] };
+    }
+
     const queue: SearchState[] = [{ current: subject, path: [], depth: 0 }];
     // 引数subjectは初回に探索するため、訪問済としておく
     const visited = new Set<EntityId>([ subject ]);
