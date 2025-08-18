@@ -24,6 +24,8 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
         graph.addRelation(relation);
         
         expect(graph.hasDirectRelation('user1', 'owns', 'doc1')).toBe(true);
+        // 逆方向インデックスも更新されることを確認
+        expect(graph.getReverseRelations('doc1', 'owns')).toContainEqual(relation);
       })
       it('同じ関係を重複追加しても1つとして扱われること', () => {
         const graph = new RelationGraph();
@@ -38,6 +40,9 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
         
         const relations = graph.getRelations('user1');
         expect(relations.length).toBe(1);
+        // 逆方向インデックスも重複しないことを確認
+        const reverseRelations = graph.getReverseRelations('doc1');
+        expect(reverseRelations.length).toBe(1);
       })
       it('同じsubjectとrelationでも異なるobjectは別の関係として扱われること', () => {
         const graph = new RelationGraph();
@@ -59,6 +64,10 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
         expect(relations.length).toBe(2);
         expect(relations).toContainEqual(relation1);
         expect(relations).toContainEqual(relation2);
+        
+        // 逆方向インデックスにも正しく追加されることを確認
+        expect(graph.getReverseRelations('doc1', 'owns')).toContainEqual(relation1);
+        expect(graph.getReverseRelations('doc2', 'owns')).toContainEqual(relation2);
       })
     })
     
@@ -73,9 +82,12 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
         
         graph.addRelation(relation);
         expect(graph.hasDirectRelation('user1', 'owns', 'doc1')).toBe(true);
+        expect(graph.getReverseRelations('doc1', 'owns')).toContainEqual(relation);
         
         graph.removeRelation(relation);
         expect(graph.hasDirectRelation('user1', 'owns', 'doc1')).toBe(false);
+        // 逆方向インデックスからも削除されることを確認
+        expect(graph.getReverseRelations('doc1', 'owns')).not.toContainEqual(relation);
       })
     })
     
@@ -198,10 +210,13 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
         
         graph.addRelation(relation);
         expect(graph.hasDirectRelation('user1', 'owns', 'doc1')).toBe(true);
+        expect(graph.getReverseRelations('doc1').length).toBe(1);
         
         graph.clear();
         expect(graph.hasDirectRelation('user1', 'owns', 'doc1')).toBe(false);
         expect(graph.getRelations('user1').length).toBe(0);
+        // 逆方向インデックスもクリアされることを確認
+        expect(graph.getReverseRelations('doc1').length).toBe(0);
       })
     })
   })
