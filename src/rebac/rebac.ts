@@ -197,33 +197,33 @@ export class RelationGraph {
    * @returns 関係性タプルの配列
    */
   getRelations(subject: EntityId, relation?: RelationType): ReadonlyArray<RelationTuple> {
-    const adjacencyList = this.adjacencyList.get(subject)
-    if (!adjacencyList) return []
+    const relations = this.adjacencyList.get(subject);
+    if (!relations) return [];
 
+    // 特定の関係タイプが指定された場合
     if (relation) {
-      const filteredList = adjacencyList.get(relation)
-      if (!filteredList) {
-        return []
-      }
-
-      return [...filteredList].map(object => {
-        return {
-          subject,
-          relation,
-          object
-        }
-      })
+      const objects = relations.get(relation);
+      if (!objects) return [];
+      
+      return Array.from(objects, object => ({
+        subject,
+        relation,
+        object
+      }));
     }
 
-    return [...adjacencyList].flatMap(([relation, objects]) => {
-      return [...objects].map(object => {
-        return {
+    // すべての関係を返す場合
+    const tuples: RelationTuple[] = [];
+    for (const [rel, objects] of relations) {
+      for (const obj of objects) {
+        tuples.push({
           subject,
-          relation,
-          object
-        }
-      })
-    })
+          relation: rel,
+          object: obj
+        });
+      }
+    }
+    return tuples;
   }
 
   /**
