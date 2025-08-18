@@ -411,9 +411,9 @@ export class ReBACProtectedResource {
    * @returns 必要な関係タイプの配列
    */
   getRequiredRelations(action: PermissionAction): RelationType[] {
-    // TODO: 実装してください
-    // ヒント：permissionRulesからactionに対応する関係を抽出
-    throw new Error('Not implemented');
+    return this.permissionRules
+      .filter(rule => rule.permissions[action])
+      .map(rule => rule.relation);
   }
 
   /**
