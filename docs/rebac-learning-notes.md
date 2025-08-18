@@ -18,7 +18,98 @@
 
 ### 核心要素
 
-#### 1. 関係性タプル（Relationship Tuple）
+#### 1. エンティティ（Entity）
+
+ReBACにおける**エンティティ（Entity）**は、権限管理システム内の**あらゆる対象物**を指す包括的な概念です。
+
+##### エンティティの定義
+- **意味**: 権限管理システム内で関係性を持ちうるすべての対象
+- **役割**: 関係性タプル内で`subject`（主体）にも`object`（客体）にもなる
+
+##### 具体例
+```typescript
+// エンティティの例
+"alice"            // ユーザー（人間）
+"bob"              // ユーザー（人間）
+"dev-team"         // チーム/グループ
+"engineering-dept" // 部門
+"document1.md"     // ドキュメント（リソース）
+"project-repo"     // リポジトリ（リソース）
+"admin-role"       // ロール
+"service-account"  // サービスアカウント
+```
+
+##### 従来の権限管理との違い
+従来の権限管理では明確に区別されていた概念が、ReBACではすべて「エンティティ」として統一的に扱われます：
+
+| 従来の区別 | ReBACでの扱い |
+|-----------|--------------|
+| ユーザー | エンティティ |
+| グループ | エンティティ |
+| リソース | エンティティ |
+| ロール | エンティティ |
+
+##### EntityId型の意味
+```typescript
+export type EntityId = string;  // @src/rebac/rebac.ts:13
+```
+`EntityId`は、システム内のあらゆるエンティティを一意に識別するための識別子です。
+
+##### エンティティ間の関係性
+```typescript
+// ユーザー → グループ
+"alice" --memberOf--> "dev-team"
+
+// グループ → リソース  
+"dev-team" --owns--> "project-docs"
+
+// グループ → グループ（階層構造）
+"dev-team" --partOf--> "engineering-dept"
+```
+
+##### 主要ReBACシステムでのエンティティ概念
+
+**Google Zanzibar**（論文：2019年）
+- 「namespace」と「object」の組み合わせでエンティティを表現
+- 例：`doc:readme`、`group:eng`、`user:alice`
+
+**SpiceDB**（Authzed社）
+- 「resource」と「subject」を統一的にエンティティとして扱う
+- スキーマ定義例：
+```
+definition user {}
+definition document {
+  relation owner: user
+  relation viewer: user | group#member
+}
+definition group {
+  relation member: user
+}
+```
+
+**OpenFGA**（Okta/Auth0、CNCF Sandbox Project）
+- 「objects」として統一的にエンティティを管理
+- タプル例：`user:anne can read document:roadmap`
+
+**Ory Keto**
+- 「subject」と「object」を文字列IDで表現
+- 明示的に「entities」という用語は使わないが、概念は同じ
+
+##### なぜ「エンティティ」という統一概念が重要か
+
+1. **柔軟な関係性の表現**: ユーザーもグループもリソースも、すべて関係の主体・客体になれる
+2. **グラフ構造の自然な表現**: ノード（エンティティ）とエッジ（関係）によるシンプルなモデル
+3. **スケーラビリティ**: 新しい種類の対象を追加しても、同じ枠組みで扱える
+
+**参照箇所**:
+- `@docs/adr-rebac-design.md:75` - 本プロジェクトでのエンティティ概念の初出
+- `@docs/adr-rebac-design.md:102` - エンティティ間関係の説明
+- `@src/rebac/rebac.ts:12-13` - EntityId型の定義
+- [Google Zanzibar Paper (2019)](https://research.google/pubs/pub48190/) - Section 2.1 "Relation Tuples"
+- [SpiceDB Concepts](https://authzed.com/docs/concepts) - "Resources and Subjects"
+- [OpenFGA Concepts](https://openfga.dev/docs/concepts) - "Objects"
+
+#### 2. 関係性タプル（Relationship Tuple）
 ReBACの基本要素は `(subject, relation, object)` の3つ組：
 
 ```typescript
@@ -68,7 +159,7 @@ role --grants--> permission     // ロール
 
 **`relation`は全システムで共通** - 関係の種類を表す概念に違いはない
 
-#### 2. グラフ構造
+#### 3. グラフ構造
 関係性タプルがグラフを形成：
 ```
 alice --manages--> dev-team
@@ -76,7 +167,7 @@ bob --memberOf--> dev-team
 bob --owns--> document1
 ```
 
-#### 3. 推移的権限
+#### 4. 推移的権限
 関係の連鎖から権限を導出：
 ```
 alice manages dev-team AND 
@@ -85,7 +176,7 @@ bob owns document1
 → alice can access document1 (管理権限による)
 ```
 
-#### 4. 関係性のカテゴリ化と設計
+#### 5. 関係性のカテゴリ化と設計
 
 **一般的な関係性の分類（実装依存）:**
 

@@ -612,6 +612,164 @@ class ZanzibarStyleExplorer {
 - Zanzibarの貢献は分散環境での最適化手法
 - 学習用実装では純粋なBFSで十分
 
+### 3.9 クラス構造の設計
+
+#### 3.9.1 探索ロジックの分離
+
+ReBACシステムにおいて、グラフ探索ロジックをどこに配置するかは重要な設計決定です。
+
+**オプション1: 単一クラス設計**
+```typescript
+class ReBACProtectedResource {
+  // グラフ管理、探索、権限判定をすべて含む
+  private graph: RelationGraph
+  
+  private findPath(subject: EntityId, object: EntityId): RelationPath | null {
+    // BFS実装をここに直接記述
+  }
+  
+  checkRelation(subject: EntityId, action: PermissionAction): ReBACDecision {
+    // 探索と権限判定を同じクラスで実行
+  }
+}
+```
+- 利点：シンプルな構造、クラス間の依存が少ない
+- 欠点：単一責任の原則違反、テストが困難、再利用性が低い
+
+**オプション2: 探索ロジックの分離（採用）**
+```typescript
+class RelationshipExplorer {
+  // グラフ探索に特化
+  constructor(private graph: RelationGraph, private config: ReBACConfig) {}
+  
+  findRelationPath(subject: EntityId, object: EntityId): ExplorationResult {
+    // BFS実装（循環検出、深度制限含む）
+  }
+}
+
+class ReBACProtectedResource {
+  // リソース保護と権限判定に特化
+  private explorer: RelationshipExplorer
+  
+  checkRelation(subject: EntityId, action: PermissionAction): ReBACDecision {
+    // explorerを使用して探索し、権限ルールを適用
+  }
+}
+```
+- 利点：単一責任の原則、高い再利用性、独立したテスト、アルゴリズムの差し替え可能
+- 欠点：クラス数の増加、若干の複雑性
+
+#### 3.9.2 分離を選択した理由
+
+**1. 単一責任の原則（Single Responsibility Principle）**
+- **RelationshipExplorer**: グラフ探索アルゴリズム（BFS）、循環検出、深度制限
+- **ReBACProtectedResource**: 特定リソースの権限管理、権限ルールの適用、結果の構築
+
+**2. テスタビリティの向上**
+```typescript
+// 探索ロジックを独立してテスト
+describe('RelationshipExplorer', () => {
+  test('BFS探索の正確性', () => {
+    const explorer = new RelationshipExplorer(mockGraph)
+    const result = explorer.findRelationPath('alice', 'document1')
+    expect(result.type).toBe('found')
+  })
+})
+
+// 権限判定ロジックを独立してテスト
+describe('ReBACProtectedResource', () => {
+  test('権限ルールの適用', () => {
+    const mockExplorer = createMockExplorer()
+    const resource = new ReBACProtectedResource('doc1', graph, rules)
+    // モックを使用して権限判定のみをテスト
+  })
+})
+```
+
+**3. 再利用性とスケーラビリティ**
+```typescript
+// 複数のリソースで同じExplorerを共有可能
+const explorer = new RelationshipExplorer(graph, config)
+const doc1 = new ReBACProtectedResource('doc1', graph, rules, config)
+const doc2 = new ReBACProtectedResource('doc2', graph, rules, config)
+
+// 異なる探索戦略への差し替えが容易
+class CachedExplorer extends RelationshipExplorer {
+  // キャッシュ機能付きの実装
+}
+
+class BidirectionalExplorer extends RelationshipExplorer {
+  // 双方向BFSの実装
+}
+```
+
+**4. 実世界のReBACシステムとの整合性**
+
+主要なReBACシステムでも同様の分離が行われています：
+
+| システム | 探索エンジン | 権限判定API | 分離の理由 |
+|---------|------------|------------|-----------|
+| **Google Zanzibar** | Resolver | Check API | 分散システムでの最適化 |
+| **SpiceDB** | Graph Walker | Permission Service | 探索アルゴリズムの柔軟性 |
+| **OpenFGA** | Evaluation Engine | Authorization API | 性能とキャッシュの最適化 |
+| **Ory Keto** | Relation Engine | Check API | シンプルな実装とテスト |
+
+**5. 将来の拡張性**
+```typescript
+// アルゴリズムの差し替えが容易
+interface ExplorerInterface {
+  findRelationPath(subject: EntityId, object: EntityId): ExplorationResult
+}
+
+class StandardExplorer implements ExplorerInterface {
+  // 標準BFS実装
+}
+
+class OptimizedExplorer implements ExplorerInterface {
+  // キャッシュ + 並列探索
+}
+
+// 同じReBACProtectedResourceで異なる探索戦略を使用可能
+```
+
+**6. 学習効果の観点**
+
+分離設計により学習者は以下を学習できます：
+- **関心の分離**: 異なる責任を持つコンポーネントの設計
+- **依存性注入**: ExplorerをReBACProtectedResourceに注入する構造
+- **インターフェース設計**: 探索アルゴリズムの抽象化
+- **テスト設計**: モックを使用した単体テスト手法
+
+#### 3.9.3 業界での実装パターン
+
+**グラフ探索と権限判定の分離は業界標準**です：
+
+```typescript
+// Google Zanzibar型の分離
+class ZanzibarResolver {
+  // グラフ探索に特化
+  async check(request: CheckRequest): Promise<CheckResponse>
+}
+
+class AuthorizationService {
+  // APIレイヤーとビジネスロジック
+  constructor(private resolver: ZanzibarResolver)
+}
+
+// SpiceDB型の分離
+class GraphWalker {
+  // 関係性の探索
+  findPath(start: ObjectReference, end: ObjectReference): Path
+}
+
+class PermissionService {
+  // 権限の評価
+  constructor(private walker: GraphWalker)
+}
+```
+
+この分離により、学習者は実際のReBACシステムで採用されている設計パターンを理解し、スケーラブルなシステムの構築方法を学ぶことができます。
+
 ## 4. 決定事項
 
 ### 4.1 採用した設計
