@@ -1,0 +1,375 @@
+/**
+ * ReBAC (Relationship-Based Access Control) 学習用実装
+ * 
+ * このファイルは学習用のスケルトンです。
+ * 各メソッドの実装は学習者が行ってください。
+ */
+
+// ============================================================
+// 基本型定義
+// ============================================================
+
+/** エンティティ識別子 */
+export type EntityId = string;
+
+/** 権限ビット（他の実装と共通） */
+export type PermissionBits = {
+  read: boolean;
+  write: boolean;
+};
+
+/** 権限アクション */
+export type PermissionAction = keyof PermissionBits;
+
+/** 関係性の種類 */
+export type RelationType = 
+  | 'owns'        // 所有関係
+  | 'manages'     // 管理関係
+  | 'memberOf'    // 所属関係
+  | 'delegatedBy' // 委譲関係
+  | 'viewer'      // 閲覧者権限
+  | 'editor';     // 編集者権限
+
+/** 関係性タプル */
+export interface RelationTuple {
+  subject: EntityId;     // 主体（ユーザーやグループ）
+  relation: RelationType; // 関係の種類
+  object: EntityId;      // 客体（リソースやグループ）
+}
+
+/** 関係性パス（探索結果） */
+export type RelationPath = RelationTuple[];
+
+/** 権限ルール */
+export interface PermissionRule {
+  relation: RelationType;
+  permissions: PermissionBits;
+  description: string;
+}
+
+/** ReBAC設定 */
+export interface ReBACConfig {
+  maxDepth: number;           // 探索の最大深度（デフォルト: 3）
+  enableCaching?: boolean;    // 探索結果のキャッシュ（オプション）
+}
+
+/** 探索状態（内部使用） */
+interface SearchState {
+  current: EntityId;
+  path: RelationPath;
+  depth: number;
+  visited: Set<EntityId>;
+}
+
+/** キャッシュエントリー（オプション） */
+interface CacheEntry {
+  path: RelationPath | null;
+  timestamp: number;
+}
+
+/** ReBAC判定結果（Tagged Union） */
+export type ReBACDecision = 
+  | { 
+      type: 'granted';
+      path: RelationPath;        // 権限の根拠となる関係性パス
+      relation: RelationType;    // マッチした関係
+    }
+  | { 
+      type: 'denied';
+      reason: 'no-relation';     // 必要な関係性が見つからない
+      searchedRelations: RelationType[]; // 探索した関係
+    }
+  | {
+      type: 'denied';
+      reason: 'max-depth-exceeded'; // 探索深度の制限
+      maxDepth: number;
+    };
+
+// ============================================================
+// デフォルト設定
+// ============================================================
+
+/** デフォルトの権限ルール */
+export const DEFAULT_PERMISSION_RULES: PermissionRule[] = [
+  { 
+    relation: 'owns', 
+    permissions: { read: true, write: true }, 
+    description: '所有者は全権限' 
+  },
+  { 
+    relation: 'manages', 
+    permissions: { read: true, write: true }, 
+    description: '管理者は全権限' 
+  },
+  { 
+    relation: 'editor', 
+    permissions: { read: true, write: true }, 
+    description: '編集者は読み書き可能' 
+  },
+  { 
+    relation: 'viewer', 
+    permissions: { read: true, write: false }, 
+    description: '閲覧者は読み取りのみ' 
+  }
+];
+
+/** デフォルト設定 */
+export const DEFAULT_CONFIG: ReBACConfig = {
+  maxDepth: 3,
+  enableCaching: false
+};
+
+// ============================================================
+// RelationGraph クラス
+// ============================================================
+
+/**
+ * 関係性グラフを管理するクラス
+ * 隣接リストによる効率的なグラフ表現を実装
+ */
+export class RelationGraph {
+  // subject -> relation -> objects のマッピング
+  private adjacencyList: Map<EntityId, Map<RelationType, Set<EntityId>>>;
+  
+  // 逆方向の索引（object -> relation -> subjects）
+  private reverseIndex: Map<EntityId, Map<RelationType, Set<EntityId>>>;
+
+  constructor() {
+    this.adjacencyList = new Map();
+    this.reverseIndex = new Map();
+  }
+
+  /**
+   * 関係性を追加
+   * @param tuple 追加する関係性タプル
+   */
+  addRelation(tuple: RelationTuple): void {
+    // TODO: 実装してください
+    // ヒント：
+    // 1. adjacencyListに関係を追加
+    // 2. reverseIndexにも逆方向の関係を追加
+    // 3. 必要に応じてMapやSetを初期化
+    throw new Error('Not implemented');
+  }
+
+  /**
+   * 関係性を削除
+   * @param tuple 削除する関係性タプル
+   */
+  removeRelation(tuple: RelationTuple): void {
+    // TODO: 実装してください
+    // ヒント：
+    // 1. adjacencyListから関係を削除
+    // 2. reverseIndexからも削除
+    // 3. 空になったMapやSetをクリーンアップ
+    throw new Error('Not implemented');
+  }
+
+  /**
+   * 直接関係の存在確認
+   * @param subject 主体
+   * @param relation 関係の種類
+   * @param object 客体
+   * @returns 関係が存在する場合true
+   */
+  hasDirectRelation(subject: EntityId, relation: RelationType, object: EntityId): boolean {
+    // TODO: 実装してください
+    // ヒント：adjacencyListを使って確認
+    throw new Error('Not implemented');
+  }
+
+  /**
+   * 主体から出る関係を取得
+   * @param subject 主体
+   * @param relation 関係の種類（省略時は全種類）
+   * @returns 関係性タプルの配列
+   */
+  getRelations(subject: EntityId, relation?: RelationType): RelationTuple[] {
+    // TODO: 実装してください
+    // ヒント：adjacencyListから関係を取得し、RelationTuple形式に変換
+    throw new Error('Not implemented');
+  }
+
+  /**
+   * 客体への関係を取得（逆方向）
+   * @param object 客体
+   * @param relation 関係の種類（省略時は全種類）
+   * @returns 関係性タプルの配列
+   */
+  getReverseRelations(object: EntityId, relation?: RelationType): RelationTuple[] {
+    // TODO: 実装してください
+    // ヒント：reverseIndexから関係を取得し、RelationTuple形式に変換
+    throw new Error('Not implemented');
+  }
+
+  /**
+   * グラフをクリア
+   */
+  clear(): void {
+    // TODO: 実装してください
+    throw new Error('Not implemented');
+  }
+}
+
+// ============================================================
+// RelationshipExplorer クラス
+// ============================================================
+
+/**
+ * 関係性の探索を行うクラス
+ * BFS（幅優先探索）により最短パスを発見
+ */
+export class RelationshipExplorer {
+  constructor(
+    private graph: RelationGraph,
+    private config: ReBACConfig = DEFAULT_CONFIG
+  ) {}
+
+  /**
+   * 関係性パスの探索（最短パスを返す）
+   * @param subject 開始エンティティ
+   * @param targetObject 目標エンティティ
+   * @returns 関係性パス（見つからない場合はnull）
+   */
+  findRelationPath(
+    subject: EntityId,
+    targetObject: EntityId
+  ): RelationPath | null {
+    // TODO: 実装してください
+    // ヒント：
+    // 1. BFSのためのキューを初期化（SearchState型を使用）
+    // 2. 訪問済みノードを管理（循環回避）
+    // 3. maxDepthで探索を制限
+    // 4. targetObjectに到達したらパスを返す
+    // 5. キューが空になったらnullを返す
+    throw new Error('Not implemented');
+  }
+
+  /**
+   * 特定の関係タイプでの探索
+   * @param subject 開始エンティティ
+   * @param relation 探索する関係タイプ
+   * @param targetObject 目標エンティティ
+   * @returns 関係性パス（見つからない場合はnull）
+   */
+  findRelationPathWithType(
+    subject: EntityId,
+    relation: RelationType,
+    targetObject: EntityId
+  ): RelationPath | null {
+    // TODO: 実装してください
+    // ヒント：特定の関係タイプのみを辿る探索
+    throw new Error('Not implemented');
+  }
+}
+
+// ============================================================
+// ReBACProtectedResource クラス
+// ============================================================
+
+/**
+ * ReBACによって保護されたリソースを表すクラス
+ */
+export class ReBACProtectedResource {
+  private explorer: RelationshipExplorer;
+
+  constructor(
+    private resourceId: EntityId,
+    private graph: RelationGraph,
+    private permissionRules: PermissionRule[] = DEFAULT_PERMISSION_RULES,
+    config?: ReBACConfig
+  ) {
+    this.explorer = new RelationshipExplorer(graph, config);
+  }
+
+  /**
+   * 関係性に基づいて権限をチェック
+   * @param subject チェック対象の主体
+   * @param action 実行したいアクション
+   * @returns 権限判定結果
+   */
+  checkRelation(subject: EntityId, action: PermissionAction): ReBACDecision {
+    // TODO: 実装してください
+    // ヒント：
+    // 1. getRequiredRelationsでアクションに必要な関係を取得
+    // 2. 各関係についてfindPathToResourceで探索
+    // 3. パスが見つかったらgranted、見つからなければdeniedを返す
+    throw new Error('Not implemented');
+  }
+
+  /**
+   * アクションに必要な関係性を取得
+   * @param action 権限アクション
+   * @returns 必要な関係タイプの配列
+   */
+  getRequiredRelations(action: PermissionAction): RelationType[] {
+    // TODO: 実装してください
+    // ヒント：permissionRulesからactionに対応する関係を抽出
+    throw new Error('Not implemented');
+  }
+
+  /**
+   * リソースへのパスを探索（内部メソッド）
+   * @param subject 主体
+   * @param relation 関係タイプ
+   * @returns 関係性パス（見つからない場合はnull）
+   */
+  private findPathToResource(
+    subject: EntityId,
+    relation: RelationType
+  ): RelationPath | null {
+    // TODO: 実装してください
+    // ヒント：explorerを使ってresourceIdへのパスを探索
+    throw new Error('Not implemented');
+  }
+
+  /**
+   * アクセス権限の説明を生成
+   * @param subject 主体
+   * @returns 各アクションに対する権限判定のマップ
+   */
+  explainAccess(subject: EntityId): Map<PermissionAction, ReBACDecision> {
+    // TODO: 実装してください
+    // ヒント：各PermissionActionについてcheckRelationを実行
+    throw new Error('Not implemented');
+  }
+
+  /**
+   * パスの妥当性を検証（内部メソッド）
+   * @param path 関係性パス
+   * @param expectedRelation 期待される関係タイプ
+   * @returns パスが妥当な場合true
+   */
+  private validatePath(path: RelationPath, expectedRelation: RelationType): boolean {
+    // TODO: 実装してください（オプション）
+    // ヒント：パスが期待される関係を含むか確認
+    throw new Error('Not implemented');
+  }
+}
+
+// ============================================================
+// ヘルパー関数
+// ============================================================
+
+/**
+ * 関係性パスを文字列形式で表現
+ * @param path 関係性パス
+ * @returns 読みやすい文字列表現
+ */
+export function formatRelationPath(path: RelationPath): string {
+  // TODO: 実装してください（オプション）
+  // 例: "alice --owns--> doc1" または "alice --manages--> team --owns--> doc1"
+  throw new Error('Not implemented');
+}
+
+/**
+ * ReBACDecisionを人間が読みやすい形式で説明
+ * @param decision 判定結果
+ * @returns 説明文字列
+ */
+export function explainDecision(decision: ReBACDecision): string {
+  // TODO: 実装してください（オプション）
+  // 例: "アクセスが許可されました。パス: alice -> team -> doc"
+  //     "アクセスが拒否されました。必要な関係が見つかりません。"
+  throw new Error('Not implemented');
+}
