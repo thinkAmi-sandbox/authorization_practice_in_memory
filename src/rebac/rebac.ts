@@ -180,12 +180,35 @@ export class RelationGraph {
    * @param tuple 削除する関係性タプル
    */
   removeRelation(tuple: RelationTuple): void {
-    // TODO: 実装してください
-    // ヒント：
-    // 1. adjacencyListから関係を削除
-    // 2. reverseAdjacencyListからも削除
-    // 3. 空になったMapやSetをクリーンアップ
-    throw new Error('Not implemented');
+    // 順方向: subject -> relation -> objects
+    const subjectRelations = this.adjacencyList.get(tuple.subject)
+    if (subjectRelations) {
+      const relationObjects = subjectRelations.get(tuple.relation);
+      if (relationObjects) {
+        relationObjects.delete(tuple.object);
+        if (relationObjects.size === 0) {
+          subjectRelations.delete(tuple.relation);
+          if (subjectRelations.size === 0) {
+            this.adjacencyList.delete(tuple.subject);
+          }
+        }
+      }
+    }
+
+    // 逆方向: object -> relation -> subjects
+    const objectRelations = this.reverseAdjacencyList.get(tuple.object)
+    if (objectRelations) {
+      const relationSubjects = objectRelations.get(tuple.relation);
+      if (relationSubjects) {
+        relationSubjects.delete(tuple.subject);
+        if (relationSubjects.size === 0) {
+          objectRelations.delete(tuple.relation);
+          if (objectRelations.size === 0) {
+            this.reverseAdjacencyList.delete(tuple.object);
+          }
+        }
+      }
+    }
   }
 
   /**
