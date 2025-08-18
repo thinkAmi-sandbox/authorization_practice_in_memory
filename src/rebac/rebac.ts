@@ -366,6 +366,46 @@ export class RelationshipExplorer {
 
     return { type: 'not-found' };
   }
+
+  /**
+   * 特定の関係から始まるパスを探索
+   * 
+   * このメソッドは「最短パスが必ずしも有効なパスではない」問題を解決するために使用されます。
+   * 
+   * @param subject 開始エンティティ
+   * @param targetObject 目標エンティティ  
+   * @param startingRelation 最初のステップで必要な関係タイプ
+   * @returns 探索結果（パス発見、未発見、深度制限超過）
+   * 
+   * @example
+   * // 使用例：aliceがeditor関係でdocumentにアクセスできるかチェック
+   * const result = explorer.findPathStartingWithRelation('alice', 'document', 'editor');
+   * 
+   * // 期待される動作：
+   * // 1. aliceから直接editor関係があるかチェック：alice --editor--> document
+   * // 2. なければ推移的なパスを探索：alice --memberOf--> team --editor--> document
+   * // 3. 見つからなければnot-foundを返す
+   */
+  findPathStartingWithRelation(
+    subject: EntityId,
+    targetObject: EntityId,
+    startingRelation: RelationType
+  ): ExplorationResult {
+    // TODO: 学習者が実装してください
+    // 
+    // 実装のヒント：
+    // 1. 直接関係をチェック：subject --startingRelation--> targetObject
+    // 2. 推移的関係を探索：subject --startingRelation--> intermediate --?--> targetObject
+    // 3. BFSを使用して最短パスを発見
+    // 4. 深度制限と循環検出を考慮
+    // 
+    // 期待される処理フロー：
+    // - Phase 1: 直接関係の確認
+    // - Phase 2: 推移的関係の探索（最初のステップは特定の関係タイプのみ）
+    // - Phase 3: 結果の構築
+    
+    throw new Error('Not implemented - 学習者が実装してください');
+  }
 }
 
 // ============================================================
