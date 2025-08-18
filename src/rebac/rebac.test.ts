@@ -828,6 +828,76 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           });
         })
       })
+
+      describe('最短パスが必ずしも有効なパスではない問題の検証', () => {
+        it('viewerの最短パスが存在するが、write権限が必要な場合', () => {
+          const graph = new RelationGraph();
+
+          // alice → document への最短パス（距離1）: viewer関係
+          graph.addRelation({
+            subject: 'alice',
+            relation: 'viewer',  // 読み取り専用
+            object: 'document'
+          });
+
+          // alice → team → document の長いパス（距離2）: editor関係
+          graph.addRelation({
+            subject: 'alice',
+            relation: 'memberOf',
+            object: 'team'
+          });
+          graph.addRelation({
+            subject: 'team',
+            relation: 'editor',  // 読み書き可能
+            object: 'document'
+          });
+
+          // リソースを作成
+          const resource = new ReBACProtectedResource(
+            'document',
+            graph,
+            DEFAULT_PERMISSION_RULES
+          );
+
+          const result = resource.checkRelation('alice', 'write');
+          expect(result.type).toBe('granted');
+        });
+
+        it('複数の関係パスがある場合の優先順位', () => {
+          const graph = new RelationGraph();
+
+          // パス1: alice → document (直接viewer - 距離1)
+          graph.addRelation({
+            subject: 'alice',
+            relation: 'viewer',
+            object: 'important-doc'
+          });
+
+          // パス2: alice → project → important-doc (manages経由 - 距離2)
+          graph.addRelation({
+            subject: 'alice',
+            relation: 'manages',
+            object: 'project'
+          });
+          graph.addRelation({
+            subject: 'project',
+            relation: 'owns',
+            object: 'important-doc'
+          });
+
+          const resource = new ReBACProtectedResource(
+            'important-doc',
+            graph,
+            DEFAULT_PERMISSION_RULES
+          );
+
+          const writeResult = resource.checkRelation('alice', 'write');
+          expect(writeResult.type).toBe('granted');
+
+          const readResult = resource.checkRelation('alice', 'read');
+          expect(readResult.type).toBe('granted');
+        });
+      });
     })
     
     describe('getRequiredRelations', () => {
