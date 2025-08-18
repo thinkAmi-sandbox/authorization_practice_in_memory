@@ -1,34 +1,187 @@
-import {describe, it} from "bun:test";
+import {describe, it, expect, beforeEach} from "bun:test";
+import {
+  RelationGraph,
+  RelationshipExplorer,
+  ReBACProtectedResource,
+  RelationType,
+  RelationTuple,
+  DEFAULT_CONFIG,
+  DEFAULT_PERMISSION_RULES
+} from "./rebac";
 
 describe('ReBAC (Relationship-Based Access Control)', () => {
   // 1. RelationGraphクラス（約150行）
   describe('RelationGraph', () => {
     describe('addRelation', () => {
-      it('関係を追加できること', () => {})
-      it('同じ関係を重複追加しても1つとして扱われること', () => {})
+      it('関係を追加できること', () => {
+        const graph = new RelationGraph();
+        const relation: RelationTuple = {
+          subject: 'user1',
+          relation: 'owns',
+          object: 'doc1'
+        };
+        
+        graph.addRelation(relation);
+        
+        expect(graph.hasDirectRelation('user1', 'owns', 'doc1')).toBe(true);
+      })
+      it('同じ関係を重複追加しても1つとして扱われること', () => {
+        const graph = new RelationGraph();
+        const relation: RelationTuple = {
+          subject: 'user1',
+          relation: 'owns',
+          object: 'doc1'
+        };
+        
+        graph.addRelation(relation);
+        graph.addRelation(relation);
+        
+        const relations = graph.getRelations('user1');
+        expect(relations.length).toBe(1);
+      })
     })
     
     describe('removeRelation', () => {
-      it('存在する関係を削除できること', () => {})
+      it('存在する関係を削除できること', () => {
+        const graph = new RelationGraph();
+        const relation: RelationTuple = {
+          subject: 'user1',
+          relation: 'owns',
+          object: 'doc1'
+        };
+        
+        graph.addRelation(relation);
+        expect(graph.hasDirectRelation('user1', 'owns', 'doc1')).toBe(true);
+        
+        graph.removeRelation(relation);
+        expect(graph.hasDirectRelation('user1', 'owns', 'doc1')).toBe(false);
+      })
     })
     
     describe('hasDirectRelation', () => {
-      it('存在する直接関係に対してtrueを返すこと', () => {})
-      it('存在しない関係に対してfalseを返すこと', () => {})
+      it('存在する直接関係に対してtrueを返すこと', () => {
+        const graph = new RelationGraph();
+        const relation: RelationTuple = {
+          subject: 'user1',
+          relation: 'editor',
+          object: 'doc1'
+        };
+        
+        graph.addRelation(relation);
+        
+        expect(graph.hasDirectRelation('user1', 'editor', 'doc1')).toBe(true);
+      })
+      it('存在しない関係に対してfalseを返すこと', () => {
+        const graph = new RelationGraph();
+        
+        expect(graph.hasDirectRelation('user1', 'owns', 'doc1')).toBe(false);
+      })
     })
     
     describe('getRelations', () => {
-      it('指定したsubjectの全関係を取得できること', () => {})
-      it('関係タイプで絞り込めること', () => {})
+      it('指定したsubjectの全関係を取得できること', () => {
+        const graph = new RelationGraph();
+        const relation1: RelationTuple = {
+          subject: 'user1',
+          relation: 'owns',
+          object: 'doc1'
+        };
+        const relation2: RelationTuple = {
+          subject: 'user1',
+          relation: 'editor',
+          object: 'doc2'
+        };
+        
+        graph.addRelation(relation1);
+        graph.addRelation(relation2);
+        
+        const relations = graph.getRelations('user1');
+        expect(relations.length).toBe(2);
+        expect(relations).toContainEqual(relation1);
+        expect(relations).toContainEqual(relation2);
+      })
+      it('関係タイプで絞り込めること', () => {
+        const graph = new RelationGraph();
+        const relation1: RelationTuple = {
+          subject: 'user1',
+          relation: 'owns',
+          object: 'doc1'
+        };
+        const relation2: RelationTuple = {
+          subject: 'user1',
+          relation: 'editor',
+          object: 'doc2'
+        };
+        
+        graph.addRelation(relation1);
+        graph.addRelation(relation2);
+        
+        const ownsRelations = graph.getRelations('user1', 'owns');
+        expect(ownsRelations.length).toBe(1);
+        expect(ownsRelations[0]).toEqual(relation1);
+      })
     })
     
     describe('getReverseRelations', () => {
-      it('指定したobjectへの全関係を取得できること', () => {})
-      it('関係タイプで絞り込めること', () => {})
+      it('指定したobjectへの全関係を取得できること', () => {
+        const graph = new RelationGraph();
+        const relation1: RelationTuple = {
+          subject: 'user1',
+          relation: 'owns',
+          object: 'doc1'
+        };
+        const relation2: RelationTuple = {
+          subject: 'user2',
+          relation: 'editor',
+          object: 'doc1'
+        };
+        
+        graph.addRelation(relation1);
+        graph.addRelation(relation2);
+        
+        const reverseRelations = graph.getReverseRelations('doc1');
+        expect(reverseRelations.length).toBe(2);
+        expect(reverseRelations).toContainEqual(relation1);
+        expect(reverseRelations).toContainEqual(relation2);
+      })
+      it('関係タイプで絞り込めること', () => {
+        const graph = new RelationGraph();
+        const relation1: RelationTuple = {
+          subject: 'user1',
+          relation: 'owns',
+          object: 'doc1'
+        };
+        const relation2: RelationTuple = {
+          subject: 'user2',
+          relation: 'editor',
+          object: 'doc1'
+        };
+        
+        graph.addRelation(relation1);
+        graph.addRelation(relation2);
+        
+        const ownsRelations = graph.getReverseRelations('doc1', 'owns');
+        expect(ownsRelations.length).toBe(1);
+        expect(ownsRelations[0]).toEqual(relation1);
+      })
     })
     
     describe('clear', () => {
-      it('全ての関係を削除できること', () => {})
+      it('全ての関係を削除できること', () => {
+        const graph = new RelationGraph();
+        const relation: RelationTuple = {
+          subject: 'user1',
+          relation: 'owns',
+          object: 'doc1'
+        };
+        
+        graph.addRelation(relation);
+        expect(graph.hasDirectRelation('user1', 'owns', 'doc1')).toBe(true);
+        
+        graph.clear();
+        expect(graph.hasDirectRelation('user1', 'owns', 'doc1')).toBe(false);
+        expect(graph.getRelations('user1').length).toBe(0);
+      })
     })
   })
 
@@ -36,23 +189,218 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
   describe('RelationshipExplorer', () => {
     describe('findRelationPath', () => {
       describe('基本的な探索', () => {
-        it('直接関係（1ホップ）のパスを返すこと', () => {})
-        it('間接関係（2ホップ）のパスを返すこと', () => {})
-        it('間接関係（3ホップ）のパスを返すこと', () => {})
-        it('関係が存在しない場合not-foundを返すこと', () => {})
+        it('直接関係（1ホップ）のパスを返すこと', () => {
+          const graph = new RelationGraph();
+          const relation: RelationTuple = {
+            subject: 'user1',
+            relation: 'owns',
+            object: 'doc1'
+          };
+          graph.addRelation(relation);
+          
+          const explorer = new RelationshipExplorer(graph);
+          const result = explorer.findRelationPath('user1', 'doc1');
+          
+          expect(result.type).toBe('found');
+          if (result.type === 'found') {
+            expect(result.path.length).toBe(1);
+            expect(result.path[0]).toEqual(relation);
+          }
+        })
+        it('間接関係（2ホップ）のパスを返すこと', () => {
+          const graph = new RelationGraph();
+          const relation1: RelationTuple = {
+            subject: 'user1',
+            relation: 'memberOf',
+            object: 'team1'
+          };
+          const relation2: RelationTuple = {
+            subject: 'team1',
+            relation: 'owns',
+            object: 'doc1'
+          };
+          
+          graph.addRelation(relation1);
+          graph.addRelation(relation2);
+          
+          const explorer = new RelationshipExplorer(graph);
+          const result = explorer.findRelationPath('user1', 'doc1');
+          
+          expect(result.type).toBe('found');
+          if (result.type === 'found') {
+            expect(result.path.length).toBe(2);
+            expect(result.path[0]).toEqual(relation1);
+            expect(result.path[1]).toEqual(relation2);
+          }
+        })
+        it('間接関係（3ホップ）のパスを返すこと', () => {
+          const graph = new RelationGraph();
+          const relation1: RelationTuple = {
+            subject: 'user1',
+            relation: 'memberOf',
+            object: 'team1'
+          };
+          const relation2: RelationTuple = {
+            subject: 'team1',
+            relation: 'memberOf',
+            object: 'org1'
+          };
+          const relation3: RelationTuple = {
+            subject: 'org1',
+            relation: 'owns',
+            object: 'doc1'
+          };
+          
+          graph.addRelation(relation1);
+          graph.addRelation(relation2);
+          graph.addRelation(relation3);
+          
+          const explorer = new RelationshipExplorer(graph);
+          const result = explorer.findRelationPath('user1', 'doc1');
+          
+          expect(result.type).toBe('found');
+          if (result.type === 'found') {
+            expect(result.path.length).toBe(3);
+            expect(result.path[0]).toEqual(relation1);
+            expect(result.path[1]).toEqual(relation2);
+            expect(result.path[2]).toEqual(relation3);
+          }
+        })
+        it('関係が存在しない場合not-foundを返すこと', () => {
+          const graph = new RelationGraph();
+          const explorer = new RelationshipExplorer(graph);
+          const result = explorer.findRelationPath('user1', 'doc1');
+          
+          expect(result.type).toBe('not-found');
+        })
       })
       
       describe('最短パス保証', () => {
-        it('複数パスが存在する場合、最短パスを返すこと', () => {})
+        it('複数パスが存在する場合、最短パスを返すこと', () => {
+          const graph = new RelationGraph();
+          // 短いパス（1ホップ）
+          const directRelation: RelationTuple = {
+            subject: 'user1',
+            relation: 'owns',
+            object: 'doc1'
+          };
+          // 長いパス（2ホップ）
+          const indirectRelation1: RelationTuple = {
+            subject: 'user1',
+            relation: 'memberOf',
+            object: 'team1'
+          };
+          const indirectRelation2: RelationTuple = {
+            subject: 'team1',
+            relation: 'owns',
+            object: 'doc1'
+          };
+          
+          graph.addRelation(directRelation);
+          graph.addRelation(indirectRelation1);
+          graph.addRelation(indirectRelation2);
+          
+          const explorer = new RelationshipExplorer(graph);
+          const result = explorer.findRelationPath('user1', 'doc1');
+          
+          expect(result.type).toBe('found');
+          if (result.type === 'found') {
+            expect(result.path.length).toBe(1);
+            expect(result.path[0]).toEqual(directRelation);
+          }
+        })
       })
       
       describe('深度制限', () => {
-        it('maxDepth内で見つかればパスを返すこと', () => {})
-        it('maxDepthを超える場合max-depth-exceededを返すこと', () => {})
+        it('maxDepth内で見つかればパスを返すこと', () => {
+          const graph = new RelationGraph();
+          const relation1: RelationTuple = {
+            subject: 'user1',
+            relation: 'memberOf',
+            object: 'team1'
+          };
+          const relation2: RelationTuple = {
+            subject: 'team1',
+            relation: 'owns',
+            object: 'doc1'
+          };
+          
+          graph.addRelation(relation1);
+          graph.addRelation(relation2);
+          
+          const explorer = new RelationshipExplorer(graph, { maxDepth: 3 });
+          const result = explorer.findRelationPath('user1', 'doc1');
+          
+          expect(result.type).toBe('found');
+          if (result.type === 'found') {
+            expect(result.path.length).toBe(2);
+          }
+        })
+        it('maxDepthを超える場合max-depth-exceededを返すこと', () => {
+          const graph = new RelationGraph();
+          const relation1: RelationTuple = {
+            subject: 'user1',
+            relation: 'memberOf',
+            object: 'team1'
+          };
+          const relation2: RelationTuple = {
+            subject: 'team1',
+            relation: 'memberOf',
+            object: 'org1'
+          };
+          const relation3: RelationTuple = {
+            subject: 'org1',
+            relation: 'owns',
+            object: 'doc1'
+          };
+          
+          graph.addRelation(relation1);
+          graph.addRelation(relation2);
+          graph.addRelation(relation3);
+          
+          const explorer = new RelationshipExplorer(graph, { maxDepth: 2 });
+          const result = explorer.findRelationPath('user1', 'doc1');
+          
+          expect(result.type).toBe('max-depth-exceeded');
+          if (result.type === 'max-depth-exceeded') {
+            expect(result.maxDepth).toBe(2);
+          }
+        })
       })
       
       describe('循環参照', () => {
-        it('循環があっても無限ループしないこと', () => {})
+        it('循環があっても無限ループしないこと', () => {
+          const graph = new RelationGraph();
+          // 循環参照を作成
+          const relation1: RelationTuple = {
+            subject: 'user1',
+            relation: 'memberOf',
+            object: 'team1'
+          };
+          const relation2: RelationTuple = {
+            subject: 'team1',
+            relation: 'memberOf',
+            object: 'user1'
+          };
+          const relation3: RelationTuple = {
+            subject: 'user1',
+            relation: 'owns',
+            object: 'doc1'
+          };
+          
+          graph.addRelation(relation1);
+          graph.addRelation(relation2);
+          graph.addRelation(relation3);
+          
+          const explorer = new RelationshipExplorer(graph);
+          const result = explorer.findRelationPath('user1', 'doc1');
+          
+          expect(result.type).toBe('found');
+          if (result.type === 'found') {
+            expect(result.path.length).toBe(1);
+            expect(result.path[0]).toEqual(relation3);
+          }
+        })
       })
     })
   })
@@ -61,18 +409,140 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
   describe('ReBACProtectedResource', () => {
     describe('checkRelation (read権限)', () => {
       describe('関係性なし', () => {
-        it('deniedを返し、reasonがno-relationであること', () => {})
+        it('deniedを返し、reasonがno-relationであること', () => {
+          const graph = new RelationGraph();
+          const resource = new ReBACProtectedResource('doc1', graph);
+          
+          const result = resource.checkRelation('user1', 'read');
+          
+          expect(result.type).toBe('denied');
+          if (result.type === 'denied' && result.reason === 'no-relation') {
+            expect(result.searchedRelations).toContain('owns');
+            expect(result.searchedRelations).toContain('editor');
+            expect(result.searchedRelations).toContain('viewer');
+          }
+        })
       })
       
       describe('直接関係', () => {
-        it('owns関係で読み取り可能', () => {})
-        it('editor関係で読み取り可能', () => {})
-        it('viewer関係で読み取り可能', () => {})
+        it('owns関係で読み取り可能', () => {
+          const graph = new RelationGraph();
+          const relation: RelationTuple = {
+            subject: 'user1',
+            relation: 'owns',
+            object: 'doc1'
+          };
+          graph.addRelation(relation);
+          
+          const resource = new ReBACProtectedResource('doc1', graph);
+          const result = resource.checkRelation('user1', 'read');
+          
+          expect(result.type).toBe('granted');
+          if (result.type === 'granted') {
+            expect(result.relation).toBe('owns');
+            expect(result.path.length).toBe(1);
+            expect(result.path[0]).toEqual(relation);
+          }
+        })
+        it('editor関係で読み取り可能', () => {
+          const graph = new RelationGraph();
+          const relation: RelationTuple = {
+            subject: 'user1',
+            relation: 'editor',
+            object: 'doc1'
+          };
+          graph.addRelation(relation);
+          
+          const resource = new ReBACProtectedResource('doc1', graph);
+          const result = resource.checkRelation('user1', 'read');
+          
+          expect(result.type).toBe('granted');
+          if (result.type === 'granted') {
+            expect(result.relation).toBe('editor');
+            expect(result.path.length).toBe(1);
+            expect(result.path[0]).toEqual(relation);
+          }
+        })
+        it('viewer関係で読み取り可能', () => {
+          const graph = new RelationGraph();
+          const relation: RelationTuple = {
+            subject: 'user1',
+            relation: 'viewer',
+            object: 'doc1'
+          };
+          graph.addRelation(relation);
+          
+          const resource = new ReBACProtectedResource('doc1', graph);
+          const result = resource.checkRelation('user1', 'read');
+          
+          expect(result.type).toBe('granted');
+          if (result.type === 'granted') {
+            expect(result.relation).toBe('viewer');
+            expect(result.path.length).toBe(1);
+            expect(result.path[0]).toEqual(relation);
+          }
+        })
       })
       
       describe('推移的な権限導出', () => {
-        it('ユーザー→チーム→ドキュメントで読み取り可能', () => {})
-        it('マネージャー→チーム→メンバー→ドキュメントで読み取り可能', () => {})
+        it('ユーザー→チーム→ドキュメントで読み取り可能', () => {
+          const graph = new RelationGraph();
+          const relation1: RelationTuple = {
+            subject: 'user1',
+            relation: 'memberOf',
+            object: 'team1'
+          };
+          const relation2: RelationTuple = {
+            subject: 'team1',
+            relation: 'editor',
+            object: 'doc1'
+          };
+          
+          graph.addRelation(relation1);
+          graph.addRelation(relation2);
+          
+          const resource = new ReBACProtectedResource('doc1', graph);
+          const result = resource.checkRelation('user1', 'read');
+          
+          expect(result.type).toBe('granted');
+          if (result.type === 'granted') {
+            expect(result.relation).toBe('editor');
+            expect(result.path.length).toBe(2);
+            expect(result.path[0]).toEqual(relation1);
+            expect(result.path[1]).toEqual(relation2);
+          }
+        })
+        it('マネージャー→チーム→メンバー→ドキュメントで読み取り可能', () => {
+          const graph = new RelationGraph();
+          const relation1: RelationTuple = {
+            subject: 'manager1',
+            relation: 'manages',
+            object: 'team1'
+          };
+          const relation2: RelationTuple = {
+            subject: 'team1',
+            relation: 'memberOf',
+            object: 'user1'
+          };
+          const relation3: RelationTuple = {
+            subject: 'user1',
+            relation: 'owns',
+            object: 'doc1'
+          };
+          
+          graph.addRelation(relation1);
+          graph.addRelation(relation2);
+          graph.addRelation(relation3);
+          
+          const resource = new ReBACProtectedResource('doc1', graph);
+          const result = resource.checkRelation('manager1', 'read');
+          
+          expect(result.type).toBe('granted');
+          if (result.type === 'granted') {
+            expect(result.relation).toBe('owns');
+            expect(result.path.length).toBe(3);
+          }
+        })
       })
       
       describe('深度制限の影響', () => {
@@ -82,34 +552,261 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
     
     describe('checkRelation (write権限)', () => {
       describe('関係性なし', () => {
-        it('deniedを返し、reasonがno-relationであること', () => {})
+        it('deniedを返し、reasonがno-relationであること', () => {
+          const graph = new RelationGraph();
+          const resource = new ReBACProtectedResource('doc1', graph);
+          
+          const result = resource.checkRelation('user1', 'write');
+          
+          expect(result.type).toBe('denied');
+          if (result.type === 'denied' && result.reason === 'no-relation') {
+            expect(result.searchedRelations).toContain('owns');
+            expect(result.searchedRelations).toContain('editor');
+          }
+        })
       })
       
       describe('直接関係', () => {
-        it('owns関係で書き込み可能', () => {})
-        it('editor関係で書き込み可能', () => {})
-        it('viewer関係で書き込み不可（権限の違いを学習）', () => {})
+        it('owns関係で書き込み可能', () => {
+          const graph = new RelationGraph();
+          const relation: RelationTuple = {
+            subject: 'user1',
+            relation: 'owns',
+            object: 'doc1'
+          };
+          graph.addRelation(relation);
+          
+          const resource = new ReBACProtectedResource('doc1', graph);
+          const result = resource.checkRelation('user1', 'write');
+          
+          expect(result.type).toBe('granted');
+          if (result.type === 'granted') {
+            expect(result.relation).toBe('owns');
+            expect(result.path.length).toBe(1);
+            expect(result.path[0]).toEqual(relation);
+          }
+        })
+        it('editor関係で書き込み可能', () => {
+          const graph = new RelationGraph();
+          const relation: RelationTuple = {
+            subject: 'user1',
+            relation: 'editor',
+            object: 'doc1'
+          };
+          graph.addRelation(relation);
+          
+          const resource = new ReBACProtectedResource('doc1', graph);
+          const result = resource.checkRelation('user1', 'write');
+          
+          expect(result.type).toBe('granted');
+          if (result.type === 'granted') {
+            expect(result.relation).toBe('editor');
+            expect(result.path.length).toBe(1);
+            expect(result.path[0]).toEqual(relation);
+          }
+        })
+        it('viewer関係で書き込み不可（権限の違いを学習）', () => {
+          const graph = new RelationGraph();
+          const relation: RelationTuple = {
+            subject: 'user1',
+            relation: 'viewer',
+            object: 'doc1'
+          };
+          graph.addRelation(relation);
+          
+          const resource = new ReBACProtectedResource('doc1', graph);
+          const result = resource.checkRelation('user1', 'write');
+          
+          expect(result.type).toBe('denied');
+          if (result.type === 'denied' && result.reason === 'no-relation') {
+            expect(result.searchedRelations).toContain('owns');
+            expect(result.searchedRelations).toContain('editor');
+          }
+        })
       })
       
       describe('推移的な権限導出', () => {
-        it('ユーザー→チーム→ドキュメントで書き込み可能', () => {})
-        it('マネージャー→チーム→メンバー→ドキュメントで書き込み可能', () => {})
-        it('パスの各ステップが正しく記録されること', () => {})
+        it('ユーザー→チーム→ドキュメントで書き込み可能', () => {
+          const graph = new RelationGraph();
+          const relation1: RelationTuple = {
+            subject: 'user1',
+            relation: 'memberOf',
+            object: 'team1'
+          };
+          const relation2: RelationTuple = {
+            subject: 'team1',
+            relation: 'editor',
+            object: 'doc1'
+          };
+          
+          graph.addRelation(relation1);
+          graph.addRelation(relation2);
+          
+          const resource = new ReBACProtectedResource('doc1', graph);
+          const result = resource.checkRelation('user1', 'write');
+          
+          expect(result.type).toBe('granted');
+          if (result.type === 'granted') {
+            expect(result.relation).toBe('editor');
+            expect(result.path.length).toBe(2);
+            expect(result.path[0]).toEqual(relation1);
+            expect(result.path[1]).toEqual(relation2);
+          }
+        })
+        it('マネージャー→チーム→メンバー→ドキュメントで書き込み可能', () => {
+          const graph = new RelationGraph();
+          const relation1: RelationTuple = {
+            subject: 'manager1',
+            relation: 'manages',
+            object: 'team1'
+          };
+          const relation2: RelationTuple = {
+            subject: 'team1',
+            relation: 'memberOf',
+            object: 'user1'
+          };
+          const relation3: RelationTuple = {
+            subject: 'user1',
+            relation: 'owns',
+            object: 'doc1'
+          };
+          
+          graph.addRelation(relation1);
+          graph.addRelation(relation2);
+          graph.addRelation(relation3);
+          
+          const resource = new ReBACProtectedResource('doc1', graph);
+          const result = resource.checkRelation('manager1', 'write');
+          
+          expect(result.type).toBe('granted');
+          if (result.type === 'granted') {
+            expect(result.relation).toBe('owns');
+            expect(result.path.length).toBe(3);
+          }
+        })
+        it('パスの各ステップが正しく記録されること', () => {
+          const graph = new RelationGraph();
+          const relation1: RelationTuple = {
+            subject: 'user1',
+            relation: 'memberOf',
+            object: 'team1'
+          };
+          const relation2: RelationTuple = {
+            subject: 'team1',
+            relation: 'owns',
+            object: 'doc1'
+          };
+          
+          graph.addRelation(relation1);
+          graph.addRelation(relation2);
+          
+          const resource = new ReBACProtectedResource('doc1', graph);
+          const result = resource.checkRelation('user1', 'write');
+          
+          expect(result.type).toBe('granted');
+          if (result.type === 'granted') {
+            expect(result.path).toEqual([relation1, relation2]);
+          }
+        })
       })
       
       describe('深度制限の影響', () => {
-        it('深度制限を超える場合、max-depth-exceededで拒否', () => {})
+        it('深度制限を超える場合、max-depth-exceededで拒否', () => {
+          const graph = new RelationGraph();
+          const relation1: RelationTuple = {
+            subject: 'user1',
+            relation: 'memberOf',
+            object: 'team1'
+          };
+          const relation2: RelationTuple = {
+            subject: 'team1',
+            relation: 'memberOf',
+            object: 'org1'
+          };
+          const relation3: RelationTuple = {
+            subject: 'org1',
+            relation: 'owns',
+            object: 'doc1'
+          };
+          
+          graph.addRelation(relation1);
+          graph.addRelation(relation2);
+          graph.addRelation(relation3);
+          
+          const resource = new ReBACProtectedResource('doc1', graph, DEFAULT_PERMISSION_RULES, { maxDepth: 2 });
+          const result = resource.checkRelation('user1', 'write');
+          
+          expect(result.type).toBe('denied');
+          if (result.type === 'denied' && result.reason === 'max-depth-exceeded') {
+            expect(result.maxDepth).toBe(2);
+          }
+        })
       })
     })
     
     describe('getRequiredRelations', () => {
-      it('writeアクションに必要な関係タイプを返すこと', () => {})
-      it('readアクションに必要な関係タイプを返すこと', () => {})
+      it('writeアクションに必要な関係タイプを返すこと', () => {
+        const graph = new RelationGraph();
+        const resource = new ReBACProtectedResource('doc1', graph);
+        
+        const requiredRelations = resource.getRequiredRelations('write');
+        
+        expect(requiredRelations).toContain('owns');
+        expect(requiredRelations).toContain('editor');
+        expect(requiredRelations).not.toContain('viewer');
+      })
+      it('readアクションに必要な関係タイプを返すこと', () => {
+        const graph = new RelationGraph();
+        const resource = new ReBACProtectedResource('doc1', graph);
+        
+        const requiredRelations = resource.getRequiredRelations('read');
+        
+        expect(requiredRelations).toContain('owns');
+        expect(requiredRelations).toContain('editor');
+        expect(requiredRelations).toContain('viewer');
+      })
     })
     
     describe('explainAccess', () => {
-      it('各アクションに対する権限判定のマップを返すこと', () => {})
-      it('複数のアクションで異なる判定結果を返すこと', () => {})
+      it('各アクションに対する権限判定のマップを返すこと', () => {
+        const graph = new RelationGraph();
+        const relation: RelationTuple = {
+          subject: 'user1',
+          relation: 'owns',
+          object: 'doc1'
+        };
+        graph.addRelation(relation);
+        
+        const resource = new ReBACProtectedResource('doc1', graph);
+        const accessMap = resource.explainAccess('user1');
+        
+        expect(accessMap.has('read')).toBe(true);
+        expect(accessMap.has('write')).toBe(true);
+        
+        const readResult = accessMap.get('read');
+        const writeResult = accessMap.get('write');
+        
+        expect(readResult?.type).toBe('granted');
+        expect(writeResult?.type).toBe('granted');
+      })
+      it('複数のアクションで異なる判定結果を返すこと', () => {
+        const graph = new RelationGraph();
+        const relation: RelationTuple = {
+          subject: 'user1',
+          relation: 'viewer',
+          object: 'doc1'
+        };
+        graph.addRelation(relation);
+        
+        const resource = new ReBACProtectedResource('doc1', graph);
+        const accessMap = resource.explainAccess('user1');
+        
+        const readResult = accessMap.get('read');
+        const writeResult = accessMap.get('write');
+        
+        expect(readResult?.type).toBe('granted');
+        expect(writeResult?.type).toBe('denied');
+      })
     })
   })
 })
