@@ -219,12 +219,12 @@ export class RelationGraph {
 
     // すべての関係を返す場合
     const tuples: RelationTuple[] = [];
-    for (const [rel, objects] of relations) {
-      for (const obj of objects) {
+    for (const [relation, objects] of relations) {
+      for (const object of objects) {
         tuples.push({
           subject,
-          relation: rel,
-          object: obj
+          relation,
+          object: object
         });
       }
     }
