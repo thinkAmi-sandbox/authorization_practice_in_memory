@@ -548,9 +548,9 @@ export class ReBACProtectedResource {
 
   constructor(
     private resourceId: EntityId,
-    private graph: RelationGraph,
+    graph: RelationGraph,
     private permissionRules: PermissionRule[] = DEFAULT_PERMISSION_RULES,
-    private config?: ReBACConfig
+    config?: ReBACConfig
   ) {
     this.explorer = new RelationshipExplorer(graph, config);
   }
