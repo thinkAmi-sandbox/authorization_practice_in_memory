@@ -556,15 +556,14 @@ export class ReBACProtectedResource {
   }
 
   /**
-   * 複数の関係性に基づいて権限をチェック（改善版）
+   * 関係性に基づいて権限をチェック
    * @param subject チェック対象の主体
    * @param action 実行したいアクション
    * @returns 権限判定結果
    */
-  checkValidRelation(subject: EntityId, action: PermissionAction): ReBACDecision {
+  checkRelation(subject: EntityId, action: PermissionAction): ReBACDecision {
     const requiredRelations = this.getRequiredRelations(action);
 
-    // 一度の探索で複数の関係をチェック
     const result = this.explorer.findPathWithAnyRelation(
       subject, 
       this.resourceId, 

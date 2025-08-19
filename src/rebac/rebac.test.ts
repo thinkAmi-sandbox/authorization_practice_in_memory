@@ -813,13 +813,13 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
 
   // 3. ReBACProtectedResourceクラス（約400行）
   describe('ReBACProtectedResource', () => {
-    describe('checkValidRelation (read権限)', () => {
+    describe('checkRelation (read権限)', () => {
       describe('関係性なし', () => {
         it('deniedを返し、reasonがno-relationであること', () => {
           const graph = new RelationGraph();
           const resource = new ReBACProtectedResource('doc1', graph);
           
-          const result = resource.checkValidRelation('user1', 'read');
+          const result = resource.checkRelation('user1', 'read');
           
           expect(result).toMatchObject({
             type: 'denied',
@@ -840,7 +840,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           graph.addRelation(relation);
           
           const resource = new ReBACProtectedResource('doc1', graph);
-          const result = resource.checkValidRelation('user1', 'read');
+          const result = resource.checkRelation('user1', 'read');
           
           expect(result).toEqual({
             type: 'granted',
@@ -858,7 +858,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           graph.addRelation(relation);
           
           const resource = new ReBACProtectedResource('doc1', graph);
-          const result = resource.checkValidRelation('user1', 'read');
+          const result = resource.checkRelation('user1', 'read');
           
           expect(result).toEqual({
             type: 'granted',
@@ -876,7 +876,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           graph.addRelation(relation);
           
           const resource = new ReBACProtectedResource('doc1', graph);
-          const result = resource.checkValidRelation('user1', 'read');
+          const result = resource.checkRelation('user1', 'read');
           
           expect(result).toEqual({
             type: 'granted',
@@ -904,7 +904,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           graph.addRelation(relation2);
           
           const resource = new ReBACProtectedResource('doc1', graph);
-          const result = resource.checkValidRelation('user1', 'read');
+          const result = resource.checkRelation('user1', 'read');
           
           expect(result).toEqual({
             type: 'granted',
@@ -935,7 +935,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           graph.addRelation(relation3);
           
           const resource = new ReBACProtectedResource('doc1', graph);
-          const result = resource.checkValidRelation('manager1', 'read');
+          const result = resource.checkRelation('manager1', 'read');
           
           expect(result).toMatchObject({
             type: 'granted',
@@ -969,7 +969,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           graph.addRelation(relation3);
           
           const resource = new ReBACProtectedResource('doc1', graph, DEFAULT_PERMISSION_RULES, { maxDepth: 2 });
-          const result = resource.checkValidRelation('user1', 'read');
+          const result = resource.checkRelation('user1', 'read');
           
           expect(result).toEqual({
             type: 'denied',
@@ -980,13 +980,13 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
       })
     })
 
-    describe('checkValidRelation（write権限）', () => {
+    describe('checkRelation（write権限）', () => {
       describe('関係性なし', () => {
         it('deniedを返し、reasonがno-relationであること', () => {
           const graph = new RelationGraph();
           const resource = new ReBACProtectedResource('doc1', graph);
 
-          const result = resource.checkValidRelation('user1', 'write');
+          const result = resource.checkRelation('user1', 'write');
 
           expect(result).toMatchObject({
             type: 'denied',
@@ -1007,7 +1007,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           graph.addRelation(relation);
 
           const resource = new ReBACProtectedResource('doc1', graph);
-          const result = resource.checkValidRelation('user1', 'write');
+          const result = resource.checkRelation('user1', 'write');
 
           expect(result).toEqual({
             type: 'granted',
@@ -1025,7 +1025,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           graph.addRelation(relation);
 
           const resource = new ReBACProtectedResource('doc1', graph);
-          const result = resource.checkValidRelation('user1', 'write');
+          const result = resource.checkRelation('user1', 'write');
 
           expect(result).toEqual({
             type: 'granted',
@@ -1043,7 +1043,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           graph.addRelation(relation);
 
           const resource = new ReBACProtectedResource('doc1', graph);
-          const result = resource.checkValidRelation('user1', 'write');
+          const result = resource.checkRelation('user1', 'write');
 
           expect(result).toMatchObject({
             type: 'denied',
@@ -1071,7 +1071,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           graph.addRelation(relation2);
 
           const resource = new ReBACProtectedResource('doc1', graph);
-          const result = resource.checkValidRelation('user1', 'write');
+          const result = resource.checkRelation('user1', 'write');
 
           expect(result).toEqual({
             type: 'granted',
@@ -1102,7 +1102,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           graph.addRelation(relation3);
 
           const resource = new ReBACProtectedResource('doc1', graph);
-          const result = resource.checkValidRelation('manager1', 'write');
+          const result = resource.checkRelation('manager1', 'write');
 
           expect(result).toMatchObject({
             type: 'granted',
@@ -1127,7 +1127,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           graph.addRelation(relation2);
 
           const resource = new ReBACProtectedResource('doc1', graph);
-          const result = resource.checkValidRelation('user1', 'write');
+          const result = resource.checkRelation('user1', 'write');
 
           // パスにowns関係が含まれているため、ownsが権限を付与した必要関係性となる
           expect(result).toEqual({
@@ -1162,7 +1162,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           graph.addRelation(relation3);
 
           const resource = new ReBACProtectedResource('doc1', graph, DEFAULT_PERMISSION_RULES, { maxDepth: 2 });
-          const result = resource.checkValidRelation('user1', 'write');
+          const result = resource.checkRelation('user1', 'write');
 
           expect(result).toEqual({
             type: 'denied',
@@ -1202,7 +1202,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
             DEFAULT_PERMISSION_RULES
           );
 
-          const result = resource.checkValidRelation('alice', 'write');
+          const result = resource.checkRelation('alice', 'write');
           expect(result.type).toBe('granted');
         })
       });
@@ -1236,10 +1236,10 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
             DEFAULT_PERMISSION_RULES
           );
 
-          const writeResult = resource.checkValidRelation('alice', 'write');
+          const writeResult = resource.checkRelation('alice', 'write');
           expect(writeResult.type).toBe('granted');
 
-          const readResult = resource.checkValidRelation('alice', 'read');
+          const readResult = resource.checkRelation('alice', 'read');
           expect(readResult.type).toBe('granted');
         })
 
@@ -1289,10 +1289,10 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
             DEFAULT_PERMISSION_RULES
           );
 
-          const writeResult = resource.checkValidRelation('alice', 'write');
+          const writeResult = resource.checkRelation('alice', 'write');
           expect(writeResult.type).toBe('denied');
 
-          const readResult = resource.checkValidRelation('alice', 'read');
+          const readResult = resource.checkRelation('alice', 'read');
           expect(readResult.type).toBe('granted');
         })
       });
@@ -1321,7 +1321,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           });
           
           const resource = new ReBACProtectedResource('document', graph);
-          const result = resource.checkValidRelation('alice', 'write');
+          const result = resource.checkRelation('alice', 'write');
           
           // 両方の関係がwrite権限を持つが、最短パス（editor）が優先される
           expect(result).toEqual({
@@ -1364,7 +1364,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           });
           
           const resource = new ReBACProtectedResource('document', graph);
-          const result = resource.checkValidRelation('alice', 'write');
+          const result = resource.checkRelation('alice', 'write');
 
           expect(result).toEqual({
             type: 'granted',
@@ -1422,7 +1422,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           const resource4 = new ReBACProtectedResource('doc4', graph);
           
           // doc2へのwrite権限（editor経由）
-          const result2 = resource2.checkValidRelation('alice', 'write');
+          const result2 = resource2.checkRelation('alice', 'write');
           expect(result2).toEqual({
             type: 'granted',
             relation: 'editor',
@@ -1433,7 +1433,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           });
           
           // doc3へのwrite権限（owns経由）
-          const result3 = resource3.checkValidRelation('alice', 'write');
+          const result3 = resource3.checkRelation('alice', 'write');
           expect(result3).toEqual({
             type: 'granted',
             relation: 'owns',
@@ -1444,7 +1444,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           });
           
           // doc4への3ホップのパス
-          const result4 = resource4.checkValidRelation('alice', 'write');
+          const result4 = resource4.checkRelation('alice', 'write');
           expect(result4).toEqual({
             type: 'granted',
             relation: 'owns',
@@ -1498,7 +1498,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           const resource = new ReBACProtectedResource('document', graph);
           
           // read権限: 最短のviewer（深さ1）が使われる
-          const readResult = resource.checkValidRelation('alice', 'read');
+          const readResult = resource.checkRelation('alice', 'read');
           expect(readResult).toEqual({
             type: 'granted',
             relation: 'viewer',
@@ -1510,7 +1510,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           });
           
           // write権限: viewerでは不十分なので、深さ3のeditorが見つかる
-          const writeResult = resource.checkValidRelation('alice', 'write');
+          const writeResult = resource.checkRelation('alice', 'write');
           expect(writeResult).toEqual({
             type: 'granted',
             relation: 'editor',
@@ -1561,7 +1561,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           const resource = new ReBACProtectedResource('document', graph);
           
           // write権限をチェック - editor関係を持つパスが選ばれる
-          const result = resource.checkValidRelation('alice', 'write');
+          const result = resource.checkRelation('alice', 'write');
           expect(result).toEqual({
             type: 'granted',
             relation: 'editor',
