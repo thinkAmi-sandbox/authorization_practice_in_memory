@@ -275,6 +275,179 @@ type RelationType = 'owns' | 'manages' | 'memberOf' | 'delegatedBy' | 'viewer' |
 - 利点：型安全、IDE補完、学習時に利用可能な関係が明確
 - 欠点：拡張時に型定義の変更が必要
 
+#### 3.1.3 関係タイプの型安全性（2025-08-19追加）
+
+**課題：単一型での関係表現の限界**
+
+現在の`RelationType`は全ての関係を1つのUnion型にまとめていますが、実際には用途が大きく異なる2つのカテゴリが混在しています：
+
+```typescript
+// 現在の実装：用途の異なる関係が混在
+type RelationType = 'owns' | 'manages' | 'memberOf' | 'delegatedBy' | 'viewer' | 'editor'
+```
+
+**問題点：**
+1. **意味的な混乱**: エンティティ間の関係（manages）とリソースへの権限（owns）が同列
+2. **誤用の防止不可**: `document manages user`のような不自然な関係の作成を型レベルで防げない
+3. **テストでの間違い**: テストコードで意図しない関係の組み合わせを作成してしまう可能性
+
+**検討したオプション：**
+
+**オプション1: 単一Union型（現状）**
+```typescript
+type RelationType = 'owns' | 'manages' | 'memberOf' | 'delegatedBy' | 'viewer' | 'editor'
+
+// 問題：以下のような不自然な関係も型的には有効
+const wrongRelation: RelationTuple = {
+  subject: 'document1',
+  relation: 'manages',  // ドキュメントがユーザーを管理？
+  object: 'alice'
+}
+```
+- 利点：シンプル、学習初期には理解しやすい
+- 欠点：型安全性が低い、意味的な誤用を防げない
+
+**オプション2: 関係カテゴリの分離（採用）**
+```typescript
+/** エンティティ間の関係タイプ */
+export type EntityRelationType = 
+  | 'manages'     // 管理関係
+  | 'memberOf'    // 所属関係  
+  | 'delegatedBy' // 委譲関係
+
+/** リソースへのアクセス関係タイプ */
+export type ResourceRelationType = 
+  | 'owns'        // 所有関係
+  | 'viewer'      // 閲覧者権限
+  | 'editor'      // 編集者権限
+
+/** 統合型（既存コードとの互換性） */
+export type RelationType = EntityRelationType | ResourceRelationType
+
+/** タプルの型も分離 */
+interface EntityRelationTuple {
+  subject: EntityId      // ユーザーまたはグループ
+  relation: EntityRelationType
+  object: EntityId       // グループまたはユーザー
+}
+
+interface ResourceRelationTuple {
+  subject: EntityId      // ユーザーまたはグループ
+  relation: ResourceRelationType
+  object: EntityId       // リソース（ドキュメント）
+}
+
+/** 統合型 */
+export type RelationTuple = EntityRelationTuple | ResourceRelationTuple
+
+/** 型ガード関数 */
+export const isEntityRelationTuple = (
+  tuple: RelationTuple
+): tuple is EntityRelationTuple => {
+  return ['manages', 'memberOf', 'delegatedBy'].includes(tuple.relation)
+}
+
+export const isResourceRelationTuple = (
+  tuple: RelationTuple
+): tuple is ResourceRelationTuple => {
+  return ['owns', 'viewer', 'editor'].includes(tuple.relation)
+}
+```
+
+**オプション3: Branded Types**
+```typescript
+// より厳密な型安全性
+declare const EntityRelationBrand: unique symbol
+declare const ResourceRelationBrand: unique symbol
+
+export type EntityRelationType = 
+  | 'manages' & { [EntityRelationBrand]: true }
+  | 'memberOf' & { [EntityRelationBrand]: true }
+  // ...
+```
+- 利点：最高レベルの型安全性
+- 欠点：学習者には理解が困難、実装が複雑
+
+**オプション4: オブジェクト指向アプローチ**
+```typescript
+abstract class RelationType {
+  abstract canConnectToResource(): boolean
+  abstract canConnectToEntity(): boolean
+}
+```
+- 利点：実行時の検証が可能
+- 欠点：学習用としては過度に複雑
+
+**採用理由（オプション2）：**
+
+1. **型安全性の向上**
+   ```typescript
+   // ✅ 正しい使用例
+   const correctEntityRelation: EntityRelationTuple = {
+     subject: 'alice',
+     relation: 'manages',
+     object: 'team1'
+   }
+   
+   const correctResourceRelation: ResourceRelationTuple = {
+     subject: 'alice', 
+     relation: 'owns',
+     object: 'document1'
+   }
+   
+   // ❌ コンパイルエラー
+   const wrongRelation: ResourceRelationTuple = {
+     subject: 'alice',
+     relation: 'manages',  // エラー: ResourceRelationTupleでは使用不可
+     object: 'document1'
+   }
+   ```
+
+2. **テストコードの安全性**
+   ```typescript
+   // 型付きビルダーパターン
+   const TestData = {
+     ownsDocument: (subject: EntityId, document: EntityId): ResourceRelationTuple => 
+       ({ subject, relation: 'owns', object: document }),
+     
+     memberOfTeam: (user: EntityId, team: EntityId): EntityRelationTuple =>
+       ({ subject: user, relation: 'memberOf', object: team }),
+   }
+   
+   // 使用例：型安全で意図が明確
+   graph.addRelation(TestData.memberOfTeam('alice', 'team1'))
+   graph.addRelation(TestData.ownsDocument('team1', 'document1'))
+   ```
+
+3. **学習効果の向上**
+   - 関係タイプの用途が型レベルで明確になる
+   - ReBACの概念（エンティティ間の関係 vs リソースへの権限）を正確に理解
+   - 実システムでの型安全性の重要性を学習
+
+4. **既存コードとの互換性**
+   - `RelationType`と`RelationTuple`は統合型として維持
+   - 段階的な移行が可能
+   - 現在の実装を壊すことなく導入可能
+
+**実装における使い分け：**
+
+| 用途 | 使用する型 | 対象となるobject |
+|------|-----------|------------------|
+| チーム管理 | `EntityRelationType` | グループ、ユーザー |
+| 組織所属 | `EntityRelationType` | グループ、部署 |
+| 権限委譲 | `EntityRelationType` | ユーザー |
+| リソース所有 | `ResourceRelationType` | ドキュメント、ファイル |
+| アクセス権限 | `ResourceRelationType` | ドキュメント、ファイル |
+
+**段階的導入パス：**
+
+1. **Phase 1**: 型定義の分離（既存コードへの影響なし）
+2. **Phase 2**: テストコードでの型付きビルダー採用
+3. **Phase 3**: 新規実装での厳密な型使用
+4. **Phase 4**: 既存コードのリファクタリング（オプション）
+
+この設計により、学習者はReBACの概念をより正確に理解し、実システムで重要な型安全性の価値を体験できます。
+
 ### 3.2 グラフ構造の実装
 
 #### 3.2.1 隣接リスト vs 隣接行列
@@ -797,20 +970,53 @@ class PermissionService {
 // エンティティ識別子
 export type EntityId = string  // 学習用：実システムではUUIDなど
 
-// 関係性の種類
-export type RelationType = 
-  | 'owns'        // 所有関係
-  | 'manages'     // 管理関係
-  | 'memberOf'    // 所属関係
-  | 'delegatedBy' // 委譲関係
-  | 'viewer'      // 閲覧者権限
-  | 'editor'      // 編集者権限
+// 関係性の種類（型分離設計 - 2025-08-19改訂）
 
-// 関係性タプル
-export interface RelationTuple {
-  subject: EntityId     // 主体（ユーザーやグループ）
-  relation: RelationType // 関係の種類
-  object: EntityId      // 客体（リソースやグループ）
+/** エンティティ間の関係タイプ */
+export type EntityRelationType = 
+  | 'manages'     // 管理関係（マネージャー → チーム/グループ）
+  | 'memberOf'    // 所属関係（ユーザー → チーム/グループ）
+  | 'delegatedBy' // 委譲関係（ユーザー → 委譲者）
+
+/** リソースへのアクセス関係タイプ */
+export type ResourceRelationType = 
+  | 'owns'        // 所有関係（ユーザー/グループ → ドキュメント）
+  | 'viewer'      // 閲覧者権限（ユーザー/グループ → ドキュメント）
+  | 'editor'      // 編集者権限（ユーザー/グループ → ドキュメント）
+
+/** 統合型（既存コードとの互換性） */
+export type RelationType = EntityRelationType | ResourceRelationType
+
+// 関係性タプル（型分離設計）
+
+/** エンティティ間の関係タプル */
+export interface EntityRelationTuple {
+  subject: EntityId           // ユーザーまたはグループ
+  relation: EntityRelationType // エンティティ間の関係
+  object: EntityId            // グループまたはユーザー
+}
+
+/** リソースへの関係タプル */
+export interface ResourceRelationTuple {
+  subject: EntityId             // ユーザーまたはグループ
+  relation: ResourceRelationType // リソースへのアクセス関係
+  object: EntityId              // リソース（ドキュメント）
+}
+
+/** 統合型（既存コードとの互換性） */
+export type RelationTuple = EntityRelationTuple | ResourceRelationTuple
+
+/** 型ガード関数 */
+export const isEntityRelationTuple = (
+  tuple: RelationTuple
+): tuple is EntityRelationTuple => {
+  return ['manages', 'memberOf', 'delegatedBy'].includes(tuple.relation)
+}
+
+export const isResourceRelationTuple = (
+  tuple: RelationTuple
+): tuple is ResourceRelationTuple => {
+  return ['owns', 'viewer', 'editor'].includes(tuple.relation)
 }
 
 // 関係性パス（権限の根拠）
@@ -1372,6 +1578,176 @@ const bobAccess = document.checkRelation('bob', 'write')
 const aliceAccess = document.checkRelation('alice', 'write')
 // → granted (パス: [alice manages engineering-team, bob memberOf engineering-team, bob owns design-doc.md])
 ```
+
+#### 7.1.1 型安全な関係作成の例（2025-08-19追加）
+
+**3.1.3で定義した型分離を活用した実装例:**
+
+```typescript
+// === 型安全な関係ビルダーの定義 ===
+
+/** リソース関係のビルダー */
+const ResourceRelations = {
+  owns: (subject: EntityId, resource: EntityId): ResourceRelationTuple => 
+    ({ subject, relation: 'owns', object: resource }),
+  
+  edits: (subject: EntityId, resource: EntityId): ResourceRelationTuple =>
+    ({ subject, relation: 'editor', object: resource }),
+  
+  views: (subject: EntityId, resource: EntityId): ResourceRelationTuple =>
+    ({ subject, relation: 'viewer', object: resource }),
+}
+
+/** エンティティ関係のビルダー */  
+const EntityRelations = {
+  manages: (manager: EntityId, team: EntityId): EntityRelationTuple =>
+    ({ subject: manager, relation: 'manages', object: team }),
+  
+  memberOf: (user: EntityId, group: EntityId): EntityRelationTuple =>
+    ({ subject: user, relation: 'memberOf', object: group }),
+  
+  delegatedBy: (user: EntityId, delegator: EntityId): EntityRelationTuple =>
+    ({ subject: user, relation: 'delegatedBy', object: delegator }),
+}
+
+// === 型安全な実装 ===
+
+// Step 1: グラフの構築（型安全）
+const graph = new RelationGraph()
+
+// Step 2: 組織構造の定義（型安全で意図が明確）
+// ✅ 関係の種類が型レベルで保証される
+graph.addRelation(EntityRelations.manages('alice', 'engineering-team'))
+graph.addRelation(EntityRelations.memberOf('bob', 'engineering-team'))
+graph.addRelation(ResourceRelations.owns('bob', 'design-doc.md'))
+
+// ❌ 以下はコンパイルエラーになる
+// graph.addRelation(ResourceRelations.owns('alice', 'engineering-team'))  // リソースではない
+// graph.addRelation(EntityRelations.manages('alice', 'design-doc.md'))    // エンティティではない
+
+// Step 3: リソースの保護
+const document = new ReBACProtectedResource(
+  'design-doc.md',
+  graph,
+  [
+    { relation: 'owns', permissions: { read: true, write: true }, description: '所有者' },
+    { relation: 'manages', permissions: { read: true, write: true }, description: '管理者' },
+    { relation: 'viewer', permissions: { read: true, write: false }, description: '閲覧者' }
+  ]
+)
+
+// Step 4: アクセスチェック（従来と同じ）
+const bobAccess = document.checkRelation('bob', 'write')
+const aliceAccess = document.checkRelation('alice', 'write')
+```
+
+**複雑な組織構造での型安全な実装:**
+
+```typescript
+// === 組織構築ヘルパー関数（型安全） ===
+
+/** 部門構造を作成 */
+const createDepartment = (
+  managerId: EntityId,
+  deptId: EntityId,
+  memberIds: EntityId[]
+): RelationTuple[] => [
+  EntityRelations.manages(managerId, deptId),
+  ...memberIds.map(memberId => EntityRelations.memberOf(memberId, deptId))
+]
+
+/** プロジェクトリソースを作成 */
+const createProjectResources = (
+  projectId: EntityId,
+  documentIds: EntityId[]
+): RelationTuple[] => 
+  documentIds.map(docId => ResourceRelations.owns(projectId, docId))
+
+/** チーム横断プロジェクトの設定 */
+const setupCrossFunctionalProject = () => {
+  const graph = new RelationGraph()
+  
+  // 機能組織の構築
+  const engineering = createDepartment('alice', 'eng-dept', ['bob', 'charlie'])
+  const design = createDepartment('diana', 'design-dept', ['eve', 'frank'])
+  
+  // プロジェクト固有のリソース
+  const projectResources = createProjectResources('mobile-project', [
+    'mobile-spec.md',
+    'mobile-design.figma', 
+    'mobile-requirements.md'
+  ])
+  
+  // プロジェクトチームの構成
+  const projectTeam = [
+    EntityRelations.memberOf('bob', 'mobile-project'),      // エンジニア参加
+    EntityRelations.memberOf('eve', 'mobile-project'),      // デザイナー参加
+    ResourceRelations.edits('mobile-project', 'mobile-spec.md'),       // プロジェクトが仕様を編集
+    ResourceRelations.views('design-dept', 'mobile-spec.md'),           // デザイン部門は仕様を閲覧
+  ]
+  
+  // すべての関係をグラフに追加
+  const allRelations = [...engineering, ...design, ...projectResources, ...projectTeam]
+  allRelations.forEach(relation => graph.addRelation(relation))
+  
+  return graph
+}
+
+// 使用例
+const crossFunctionalGraph = setupCrossFunctionalProject()
+const mobileSpec = new ReBACProtectedResource('mobile-spec.md', crossFunctionalGraph)
+
+// Bob（エンジニア）はプロジェクト経由で編集可能
+const bobAccess = mobileSpec.checkRelation('bob', 'write')
+// → granted (パス: [bob memberOf mobile-project, mobile-project edits mobile-spec.md])
+
+// Eve（デザイナー）もプロジェクト経由で編集可能
+const eveAccess = mobileSpec.checkRelation('eve', 'write') 
+// → granted (パス: [eve memberOf mobile-project, mobile-project edits mobile-spec.md])
+
+// Frank（デザイナー、プロジェクト非参加）は閲覧のみ
+const frankReadAccess = mobileSpec.checkRelation('frank', 'read')
+// → granted (パス: [frank memberOf design-dept, design-dept views mobile-spec.md])
+
+const frankWriteAccess = mobileSpec.checkRelation('frank', 'write')
+// → denied (write権限のパスが存在しない)
+```
+
+**型安全性による開発者体験の向上:**
+
+```typescript
+// === IDEでの補完とエラー検出 ===
+
+// 1. オートコンプリート機能
+ResourceRelations.  // IDE: owns, edits, views が表示される
+EntityRelations.    // IDE: manages, memberOf, delegatedBy が表示される
+
+// 2. 型エラーによる早期発見
+const wrongRelation = EntityRelations.manages('alice', 'document.md')
+// → 意味的に正しい：管理者がドキュメントを管理することは有り得る
+// → しかし、ReBACの設計では manages はエンティティ間の関係
+
+const betterApproach = ResourceRelations.owns('alice', 'document.md')
+// → より適切：ユーザーがドキュメントを所有する
+
+// 3. リファクタリング時の安全性
+// 関係タイプの名前を変更した場合、すべての使用箇所で型エラーが発生
+// → コンパイル時に変更漏れを検出
+
+// 4. ドキュメント化効果
+// 関数の型シグネチャがそのままドキュメントとして機能
+EntityRelations.manages(
+  manager: EntityId,    // 管理者
+  team: EntityId        // 管理対象のチーム
+): EntityRelationTuple  // エンティティ間の関係であることが明確
+```
+
+この型安全な実装により、学習者は以下のメリットを体験できます：
+
+1. **開発時の安全性**: コンパイル時に関係の誤用を検出
+2. **可読性の向上**: 関係の意図がコードから明確に読み取れる
+3. **保守性の向上**: 変更時の影響範囲を型システムで把握
+4. **学習効果**: ReBACの概念（エンティティ関係 vs リソース権限）を型レベルで理解
 
 ### 7.2 推移的権限の例
 
@@ -1990,6 +2366,248 @@ expect(result).toMatchObject({       // 絞り込み後のプロパティを検�
 ```
 
 この設計により、テストコードの可読性と保守性を確保しながら、学習者の実装の自由度を適切に保つことができます。
+
+#### 8.1.5 型安全なテストデータ作成パターン（2025-08-19追加）
+
+関係タイプの型分離（3.1.3）を受けて、テストコードでの型安全なデータ作成パターンを定義します。
+
+##### 8.1.5.1 型付きビルダーパターンの採用
+
+**従来のテストデータ作成（型安全性が低い）:**
+```typescript
+// 問題：意図しない関係の組み合わせを作成する可能性
+describe('ReBAC Tests', () => {
+  test('example', () => {
+    const graph = new RelationGraph()
+    
+    // ❌ 型的には有効だが、意味的に不自然
+    graph.addRelation({ 
+      subject: 'document1', 
+      relation: 'manages',  // ドキュメントがチームを管理？
+      object: 'team1' 
+    })
+    
+    // ❌ タイプミスも防げない
+    graph.addRelation({ 
+      subject: 'alice', 
+      relation: 'owms',  // typo: 'owns' → 'owms'
+      object: 'doc1' 
+    })
+  })
+})
+```
+
+**型付きビルダーパターン（推奨）:**
+```typescript
+// テストファイルの冒頭で定義
+const TestData = {
+  // === リソース関係のビルダー ===
+  
+  /** ユーザー/グループがドキュメントを所有 */
+  ownsDocument: (subject: EntityId, document: EntityId): ResourceRelationTuple => 
+    ({ subject, relation: 'owns', object: document }),
+  
+  /** ユーザー/グループがドキュメントを編集可能 */
+  editsDocument: (subject: EntityId, document: EntityId): ResourceRelationTuple =>
+    ({ subject, relation: 'editor', object: document }),
+  
+  /** ユーザー/グループがドキュメントを閲覧可能 */
+  viewsDocument: (subject: EntityId, document: EntityId): ResourceRelationTuple =>
+    ({ subject, relation: 'viewer', object: document }),
+  
+  // === エンティティ関係のビルダー ===
+  
+  /** ユーザーがチーム/グループのメンバー */
+  memberOfTeam: (user: EntityId, team: EntityId): EntityRelationTuple =>
+    ({ subject: user, relation: 'memberOf', object: team }),
+  
+  /** マネージャーがチーム/グループを管理 */
+  managesTeam: (manager: EntityId, team: EntityId): EntityRelationTuple =>
+    ({ subject: manager, relation: 'manages', object: team }),
+  
+  /** ユーザーが他のユーザーから権限を委譲 */
+  delegatedBy: (user: EntityId, delegator: EntityId): EntityRelationTuple =>
+    ({ subject: user, relation: 'delegatedBy', object: delegator }),
+}
+
+// 使用例
+describe('ReBAC Tests with Type Safety', () => {
+  test('チーム経由のドキュメントアクセス', () => {
+    const graph = new RelationGraph()
+    
+    // ✅ 型安全で意図が明確
+    graph.addRelation(TestData.memberOfTeam('alice', 'dev-team'))
+    graph.addRelation(TestData.editsDocument('dev-team', 'project-spec'))
+    
+    const resource = new ReBACProtectedResource('project-spec', graph)
+    const result = resource.checkRelation('alice', 'write')
+    
+    expect(result.type).toBe('granted')
+  })
+  
+  test('管理者権限による間接アクセス', () => {
+    const graph = new RelationGraph()
+    
+    // ✅ 関係の種類と方向が明確
+    graph.addRelation(TestData.managesTeam('bob', 'support-team'))
+    graph.addRelation(TestData.memberOfTeam('charlie', 'support-team'))
+    graph.addRelation(TestData.ownsDocument('charlie', 'support-manual'))
+    
+    const resource = new ReBACProtectedResource('support-manual', graph)
+    const result = resource.checkRelation('bob', 'write')
+    
+    expect(result).toMatchObject({
+      type: 'granted',
+      relation: 'manages'
+    })
+  })
+})
+```
+
+##### 8.1.5.2 複雑なシナリオ用のビルダー
+
+```typescript
+// 高レベルなシナリオビルダー
+const TestScenarios = {
+  /** 標準的なチーム構造を作成 */
+  createTeamStructure: (
+    managerId: EntityId, 
+    teamId: EntityId, 
+    memberIds: EntityId[]
+  ): RelationTuple[] => [
+    TestData.managesTeam(managerId, teamId),
+    ...memberIds.map(memberId => TestData.memberOfTeam(memberId, teamId))
+  ],
+  
+  /** プロジェクトベースのアクセス構造を作成 */
+  createProjectAccess: (
+    projectId: EntityId,
+    teamId: EntityId,
+    documentIds: EntityId[]
+  ): RelationTuple[] => [
+    TestData.memberOfTeam(teamId, projectId),  // チームがプロジェクトに参加
+    ...documentIds.map(docId => TestData.editsDocument(projectId, docId))
+  ],
+  
+  /** 権限委譲のシナリオを作成 */
+  createDelegationChain: (
+    originalOwner: EntityId,
+    delegates: EntityId[],
+    resourceId: EntityId
+  ): RelationTuple[] => [
+    TestData.ownsDocument(originalOwner, resourceId),
+    ...delegates.map(delegate => TestData.delegatedBy(delegate, originalOwner))
+  ]
+}
+
+// 使用例
+describe('Complex ReBAC Scenarios', () => {
+  test('マトリックス組織での横断プロジェクトアクセス', () => {
+    const graph = new RelationGraph()
+    
+    // 機能組織の構築
+    const engineeringTeam = TestScenarios.createTeamStructure(
+      'cto', 'engineering', ['alice', 'bob']
+    )
+    const designTeam = TestScenarios.createTeamStructure(
+      'design-director', 'design', ['charlie', 'diana']
+    )
+    
+    // プロジェクトチームの構築  
+    const mobileProject = TestScenarios.createProjectAccess(
+      'mobile-project', 'engineering', ['mobile-spec', 'mobile-design']
+    )
+    const crossFunctionalAccess = [
+      TestData.memberOfTeam('charlie', 'mobile-project'),  // デザイナーも参加
+      TestData.viewsDocument('design', 'mobile-spec')      // デザインチームは仕様を閲覧
+    ]
+    
+    // すべての関係をグラフに追加
+    [...engineeringTeam, ...designTeam, ...mobileProject, ...crossFunctionalAccess]
+      .forEach(relation => graph.addRelation(relation))
+    
+    const spec = new ReBACProtectedResource('mobile-spec', graph)
+    
+    // エンジニアは編集可能
+    expect(spec.checkRelation('alice', 'write').type).toBe('granted')
+    
+    // デザイナーは閲覧のみ
+    expect(spec.checkRelation('charlie', 'read').type).toBe('granted') 
+    expect(spec.checkRelation('charlie', 'write').type).toBe('denied')
+  })
+})
+```
+
+##### 8.1.5.3 型安全性のメリット
+
+**1. コンパイル時エラーの検出**
+```typescript
+// ❌ コンパイルエラー：ResourceRelationTupleでEntityRelationTypeは使用不可
+const wrongBuilder = (subject: EntityId, object: EntityId): ResourceRelationTuple => 
+  ({ subject, relation: 'manages', object })  // Type error!
+
+// ✅ 正しい型の組み合わせ
+const correctBuilder = (subject: EntityId, object: EntityId): EntityRelationTuple => 
+  ({ subject, relation: 'manages', object })
+```
+
+**2. IDEでの補完とドキュメント化**
+```typescript
+// IDEで TestData. と入力すると、利用可能な関係ビルダーが表示される
+TestData.
+  ├── ownsDocument      // (subject: EntityId, document: EntityId): ResourceRelationTuple
+  ├── editsDocument     // (subject: EntityId, document: EntityId): ResourceRelationTuple  
+  ├── viewsDocument     // (subject: EntityId, document: EntityId): ResourceRelationTuple
+  ├── memberOfTeam      // (user: EntityId, team: EntityId): EntityRelationTuple
+  ├── managesTeam       // (manager: EntityId, team: EntityId): EntityRelationTuple
+  └── delegatedBy       // (user: EntityId, delegator: EntityId): EntityRelationTuple
+```
+
+**3. テストの可読性向上**
+```typescript
+// 従来：関係の意図が不明確
+graph.addRelation({ subject: 'alice', relation: 'memberOf', object: 'team1' })
+graph.addRelation({ subject: 'team1', relation: 'editor', object: 'doc1' })
+
+// 改善：関係の意図が明確
+graph.addRelation(TestData.memberOfTeam('alice', 'team1'))
+graph.addRelation(TestData.editsDocument('team1', 'doc1'))
+```
+
+##### 8.1.5.4 学習効果
+
+この型付きビルダーパターンにより、学習者は以下を体験できます：
+
+1. **ReBACの概念理解**: エンティティ間の関係とリソースへの権限の違いを型レベルで学習
+2. **型安全性の価値**: コンパイル時エラーによる早期発見の重要性
+3. **実システムでの考慮事項**: 大規模なテストスイートでの保守性の重要性
+4. **設計パターンの学習**: ビルダーパターンやファクトリーパターンの実践
+
+##### 8.1.5.5 段階的な導入
+
+学習者は以下の順序で型安全なテストを導入できます：
+
+**Phase 1**: 基本的なビルダーの理解と使用
+```typescript
+// 単純な直接関係のテスト
+graph.addRelation(TestData.ownsDocument('alice', 'doc1'))
+```
+
+**Phase 2**: 複数関係の組み合わせ
+```typescript  
+// 推移的な関係のテスト
+graph.addRelation(TestData.memberOfTeam('alice', 'team1'))
+graph.addRelation(TestData.editsDocument('team1', 'doc1'))
+```
+
+**Phase 3**: 高レベルシナリオビルダーの活用
+```typescript
+// 複雑な組織構造のテスト
+const relations = TestScenarios.createTeamStructure('manager', 'team', ['user1', 'user2'])
+relations.forEach(r => graph.addRelation(r))
+```
+
+この段階的なアプローチにより、学習者は型安全性の概念を徐々に理解し、実際のプロダクト開発で役立つスキルを身につけることができます。
 
 ### 8.2 統合テスト
 
