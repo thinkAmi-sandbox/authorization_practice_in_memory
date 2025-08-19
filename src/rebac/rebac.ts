@@ -63,7 +63,7 @@ export type RelationPath = RelationTuple[];
 
 /** 権限ルール */
 export interface PermissionRule {
-  relation: RelationType;
+  relation: ResourceRelationType;
   permissions: PermissionBits;
   description: string;
 }
@@ -115,12 +115,12 @@ export type ReBACDecision =
   | { 
       type: 'granted';
       path: RelationPath;        // 権限の根拠となる関係性パス
-      relation: RelationType;    // マッチした関係
+      relation: ResourceRelationType;    // マッチした関係
     }
   | { 
       type: 'denied';
       reason: 'no-relation';     // 必要な関係性が見つからない
-      searchedRelations: RelationType[]; // 探索した関係
+      searchedRelations: ResourceRelationType[]; // 探索した関係
     }
   | {
       type: 'denied';
@@ -584,7 +584,7 @@ export class ReBACProtectedResource {
       case 'found':
         const relations = result.path.map(tuple => tuple.relation);
 
-        const matchedRelation = relations.find(relation => requiredRelations.has(relation));
+        const matchedRelation = relations.find(relation => requiredRelations.has(relation as ResourceRelationType)) as ResourceRelationType | undefined;
         if (matchedRelation) {
           return { type: 'granted', path: result.path, relation: matchedRelation };
         }
@@ -619,7 +619,7 @@ export class ReBACProtectedResource {
         return { 
           type: 'granted', 
           path: result.path, 
-          relation: result.matchedRelation
+          relation: result.matchedRelation as ResourceRelationType
         };
 
       case 'max-depth-exceeded':
@@ -643,7 +643,7 @@ export class ReBACProtectedResource {
    * @param action 権限アクション
    * @returns 必要な関係タイプの配列
    */
-  getRequiredRelations(action: PermissionAction): ReadonlySet<RelationType> {
+  getRequiredRelations(action: PermissionAction): ReadonlySet<ResourceRelationType> {
     return new Set(
       this.permissionRules
       .filter(rule => rule.permissions[action])
