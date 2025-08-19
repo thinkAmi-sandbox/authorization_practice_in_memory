@@ -320,12 +320,12 @@ export class RelationshipExplorer {
    * const relations = new Set(['viewer', 'editor', 'owns']);
    * const result = explorer.findPathWithAnyRelation('alice', 'document', relations);
    */
-  findPathWithAnyRelation(
+  findRelationPath(
     subject: EntityId,
     targetObject: EntityId,
     targetRelations: ReadonlySet<RelationType>
   ): ExplorationResult {
-    // 直接関係をチェック
+    // 最初に、直接関係をチェック
     // 直接関係チェックはなくても機能的には問題ないが、BFSによる探索を行わなくて済み、パフォーマンス面で良い
     // 既存のReBACの実装も同等となっていることから、今回も実装を残しておく
     // (以下、Claude Opus 4.1 による調査結果)
@@ -424,7 +424,7 @@ export class ReBACProtectedResource {
   checkRelation(subject: EntityId, action: PermissionAction): ReBACDecision {
     const requiredRelations = this.getRequiredRelations(action);
 
-    const result = this.explorer.findPathWithAnyRelation(
+    const result = this.explorer.findRelationPath(
       subject, 
       this.resourceId, 
       requiredRelations

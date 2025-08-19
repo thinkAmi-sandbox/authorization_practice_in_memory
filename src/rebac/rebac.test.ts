@@ -176,7 +176,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
 
   // 2. RelationshipExplorerクラス
   describe('RelationshipExplorer', () => {
-    describe('findPathWithAnyRelation', () => {
+    describe('findRelation', () => {
       describe('基本的な探索', () => {
         it('直接関係（単一関係タイプ）のパスを返すこと', () => {
           const graph = new RelationGraph();
@@ -188,7 +188,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           graph.addRelation(relation);
           
           const explorer = new RelationshipExplorer(graph);
-          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['editor']));
+          const result = explorer.findRelationPath('user1', 'doc1', new Set(['editor']));
           
           expect(result).toEqual({
             type: 'found',
@@ -206,7 +206,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           graph.addRelation(relation);
           
           const explorer = new RelationshipExplorer(graph);
-          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['editor', 'viewer', 'owns']));
+          const result = explorer.findRelationPath('user1', 'doc1', new Set(['editor', 'viewer', 'owns']));
           
           expect(result).toEqual({
             type: 'found',
@@ -231,7 +231,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           graph.addRelation(relation2);
           
           const explorer = new RelationshipExplorer(graph);
-          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['editor', 'owns']));
+          const result = explorer.findRelationPath('user1', 'doc1', new Set(['editor', 'owns']));
           
           expect(result).toEqual({
             type: 'found',
@@ -262,7 +262,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           graph.addRelation(relation3);
           
           const explorer = new RelationshipExplorer(graph);
-          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['owns', 'editor']));
+          const result = explorer.findRelationPath('user1', 'doc1', new Set(['owns', 'editor']));
           
           expect(result).toEqual({
             type: 'found',
@@ -273,7 +273,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
         it('関係が存在しない場合not-foundを返すこと', () => {
           const graph = new RelationGraph();
           const explorer = new RelationshipExplorer(graph);
-          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['editor', 'owns']));
+          const result = explorer.findRelationPath('user1', 'doc1', new Set(['editor', 'owns']));
           
           expect(result).toEqual({
             type: 'not-found'
@@ -289,7 +289,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           graph.addRelation(relation);
           
           const explorer = new RelationshipExplorer(graph);
-          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set([]));
+          const result = explorer.findRelationPath('user1', 'doc1', new Set([]));
           
           expect(result).toEqual({
             type: 'not-found'
@@ -302,7 +302,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           const graph = new RelationGraph();
           const explorer = new RelationshipExplorer(graph);
           
-          const result = explorer.findPathWithAnyRelation('user1', 'user1', new Set(['editor', 'owns']));
+          const result = explorer.findRelationPath('user1', 'user1', new Set(['editor', 'owns']));
           
           expect(result).toEqual({
             type: 'not-found'
@@ -319,7 +319,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           graph.addRelation(selfRelation);
           
           const explorer = new RelationshipExplorer(graph);
-          const result = explorer.findPathWithAnyRelation('group1', 'group1', new Set(['manages', 'owns']));
+          const result = explorer.findRelationPath('group1', 'group1', new Set(['manages', 'owns']));
           
           expect(result).toEqual({
             type: 'found',
@@ -355,7 +355,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           graph.addRelation(indirectRelation2);
           
           const explorer = new RelationshipExplorer(graph);
-          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['owns', 'editor']));
+          const result = explorer.findRelationPath('user1', 'doc1', new Set(['owns', 'editor']));
           
           expect(result).toEqual({
             type: 'found',
@@ -393,7 +393,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           });
           
           const explorer = new RelationshipExplorer(graph);
-          const result = explorer.findPathWithAnyRelation('alice', 'document', new Set(['editor', 'owns']));
+          const result = explorer.findRelationPath('alice', 'document', new Set(['editor', 'owns']));
 
           expect(result).toEqual({
             type: 'found',
@@ -438,7 +438,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           });
           
           const explorer = new RelationshipExplorer(graph);
-          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['editor', 'owns']));
+          const result = explorer.findRelationPath('user1', 'doc1', new Set(['editor', 'owns']));
           
           expect(result).toEqual({
             type: 'found',
@@ -469,7 +469,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           graph.addRelation(relation2);
           
           const explorer = new RelationshipExplorer(graph, { maxDepth: 3 });
-          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['editor', 'owns']));
+          const result = explorer.findRelationPath('user1', 'doc1', new Set(['editor', 'owns']));
           
           expect(result).toEqual({
             type: 'found',
@@ -500,7 +500,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           graph.addRelation(relation3);
           
           const explorer = new RelationshipExplorer(graph, { maxDepth: 2 });
-          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['editor', 'owns']));
+          const result = explorer.findRelationPath('user1', 'doc1', new Set(['editor', 'owns']));
           
           expect(result).toEqual({
             type: 'max-depth-exceeded',
@@ -540,7 +540,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           });
           
           const explorer = new RelationshipExplorer(graph, { maxDepth: 2 });
-          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['editor', 'owns']));
+          const result = explorer.findRelationPath('user1', 'doc1', new Set(['editor', 'owns']));
           
           // maxDepth内で見つかるeditorパスが返される
           expect(result).toEqual({
@@ -579,7 +579,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           graph.addRelation(relation3);
           
           const explorer = new RelationshipExplorer(graph);
-          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['editor', 'owns']));
+          const result = explorer.findRelationPath('user1', 'doc1', new Set(['editor', 'owns']));
           
           expect(result).toEqual({
             type: 'found',
@@ -619,7 +619,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           graph.addRelation(validRelation2);
           
           const explorer = new RelationshipExplorer(graph);
-          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['owns', 'editor']));
+          const result = explorer.findRelationPath('user1', 'doc1', new Set(['owns', 'editor']));
           
           expect(result).toEqual({
             type: 'found',
@@ -649,7 +649,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           graph.addRelation(editorRelation);
           
           const explorer = new RelationshipExplorer(graph);
-          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['owns', 'editor']));
+          const result = explorer.findRelationPath('user1', 'doc1', new Set(['owns', 'editor']));
           
           // 両方とも深さ1だが、最初に見つかった関係が返される
           expect(result).toEqual({
@@ -670,7 +670,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           graph.addRelation(relation);
           
           const explorer = new RelationshipExplorer(graph);
-          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['owns', 'viewer', 'editor']));
+          const result = explorer.findRelationPath('user1', 'doc1', new Set(['owns', 'viewer', 'editor']));
           
           expect(result).toEqual({
             type: 'found',
@@ -690,7 +690,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           graph.addRelation(relation);
           
           const explorer = new RelationshipExplorer(graph);
-          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['owns', 'editor']));
+          const result = explorer.findRelationPath('user1', 'doc1', new Set(['owns', 'editor']));
           
           expect(result).toEqual({
             type: 'not-found'
@@ -710,9 +710,9 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           const explorer = new RelationshipExplorer(graph);
           
           // 順序を変えても同じ結果になることを確認
-          const result1 = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['owns', 'editor', 'viewer']));
-          const result2 = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['viewer', 'owns', 'editor']));
-          const result3 = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['editor', 'viewer', 'owns']));
+          const result1 = explorer.findRelationPath('user1', 'doc1', new Set(['owns', 'editor', 'viewer']));
+          const result2 = explorer.findRelationPath('user1', 'doc1', new Set(['viewer', 'owns', 'editor']));
+          const result3 = explorer.findRelationPath('user1', 'doc1', new Set(['editor', 'viewer', 'owns']));
           
           expect(result1).toEqual({
             type: 'found',
