@@ -1514,6 +1514,59 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           const readResult = resource.checkValidRelation('alice', 'read');
           expect(readResult.type).toBe('granted');
         })
+
+        it('viewerの権限しかないのでwriteの権限がないと判定されること', () => {
+          const graph = new RelationGraph();
+
+          // パス1: alice → document (直接viewer - 距離1)
+          graph.addRelation({
+            subject: 'alice',
+            relation: 'viewer',
+            object: 'important-doc'
+          });
+
+          // パス2: alice → project → important-doc (manages経由 - 距離2)
+          graph.addRelation({
+            subject: 'alice',
+            relation: 'manages',
+            object: 'project'
+          });
+          graph.addRelation({
+            subject: 'project',
+            relation: 'viewer',
+            object: 'important-doc'
+          });
+
+          // パス3: alice → team → project → important-doc (manages経由 - 距離3)
+          graph.addRelation({
+            subject: 'alice',
+            relation: 'manages',
+            object: 'bob'
+          });
+          graph.addRelation({
+            subject: 'bob',
+            relation: 'manages',
+            object: 'team'
+          });
+
+          graph.addRelation({
+            subject: 'team',
+            relation: 'viewer',
+            object: 'important-doc'
+          });
+
+          const resource = new ReBACProtectedResource(
+            'important-doc',
+            graph,
+            DEFAULT_PERMISSION_RULES
+          );
+
+          const writeResult = resource.checkValidRelation('alice', 'write');
+          expect(writeResult.type).toBe('denied');
+
+          const readResult = resource.checkValidRelation('alice', 'read');
+          expect(readResult.type).toBe('granted');
+        })
       });
     })
     
