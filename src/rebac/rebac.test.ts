@@ -1609,7 +1609,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
         it('同じ深さで複数の有効な関係がある場合、最初にチェックされた関係を返すこと', () => {
           const graph = new RelationGraph();
           
-          // 両方とも距離2の異なる有効なパス
+          // 両方とも距離2、ただし、それぞれ異なる有効なパス
           // パス1: alice → team1 → document (editor経由)
           graph.addRelation({
             subject: 'alice',
@@ -1636,11 +1636,15 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           
           const resource = new ReBACProtectedResource('document', graph);
           const result = resource.checkValidRelation('alice', 'write');
-          
-          expect(result.type).toBe('granted');
-          // BFSの探索順序により、どちらかの関係が返される
-          expect(['editor', 'owns']).toContain(result.relation);
-          expect(result.path).toHaveLength(2);
+
+          expect(result).toEqual({
+            type: 'granted',
+            relation: 'editor',
+            path: [
+              { subject: 'alice', relation: 'memberOf', object: 'team1' },
+              { subject: 'team1', relation: 'editor', object: 'document' }
+            ]
+          });
         });
       });
 
