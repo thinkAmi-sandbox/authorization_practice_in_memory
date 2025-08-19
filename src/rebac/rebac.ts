@@ -51,7 +51,7 @@ export interface ResourceRelationTuple {
   object: EntityId              // リソース（ドキュメント）
 }
 
-/** 関係性タプル（統合型・既存コードとの互換性のため維持） */
+/** 関係性タプル */
 export interface RelationTuple {
   subject: EntityId;     // 主体（ユーザーやグループ）
   relation: RelationType; // 関係の種類
@@ -70,7 +70,7 @@ export interface PermissionRule {
 
 /** ReBAC設定 */
 export interface ReBACConfig {
-  maxDepth: number;           // 探索の最大深度（デフォルト: 3）
+  maxDepth: number;           // 探索の最大深度
 }
 
 /** 探索状態（内部使用） */
@@ -82,21 +82,7 @@ interface SearchState {
 
 
 /** 探索結果の型 */
-export type ExplorationResult = 
-  | {
-      type: 'found';
-      path: RelationPath;
-    }
-  | {
-      type: 'not-found';
-    }
-  | {
-      type: 'max-depth-exceeded';
-      maxDepth: number;
-    };
-
-/** 複数関係探索の結果型 */
-export type MultiRelationExplorationResult = 
+export type ExplorationResult =
   | {
       type: 'found';
       path: RelationPath;
@@ -255,26 +241,12 @@ export class RelationGraph {
   /**
    * 主体から出る関係を取得
    * @param subject 主体
-   * @param relation 関係の種類（省略時は全種類）
    * @returns 関係性タプルの配列
    */
-  getRelations(subject: EntityId, relation?: RelationType): ReadonlyArray<RelationTuple> {
+  getRelations(subject: EntityId): ReadonlyArray<RelationTuple> {
     const relations = this.adjacencyList.get(subject);
     if (!relations) return [];
 
-    // 特定の関係タイプが指定された場合
-    if (relation) {
-      const objects = relations.get(relation);
-      if (!objects) return [];
-      
-      return Array.from(objects, object => ({
-        subject,
-        relation,
-        object
-      }));
-    }
-
-    // すべての関係を返す場合
     const tuples: RelationTuple[] = [];
     for (const [relation, objects] of relations) {
       for (const object of objects) {
@@ -291,26 +263,12 @@ export class RelationGraph {
   /**
    * 客体への関係を取得（逆方向）
    * @param object 客体
-   * @param relation 関係の種類（省略時は全種類）
    * @returns 関係性タプルの配列
    */
-  getReverseRelations(object: EntityId, relation?: RelationType): RelationTuple[] {
+  getReverseRelations(object: EntityId): ReadonlyArray<RelationTuple> {
     const relations = this.reverseAdjacencyList.get(object);
     if (!relations) return [];
 
-    // 特定の関係タイプが指定された場合
-    if (relation) {
-      const subjects = relations.get(relation);
-      if (!subjects) return [];
-
-      return Array.from(subjects, subject => ({
-        subject,
-        relation,
-        object
-      }));
-    }
-
-    // すべての関係を返す場合
     const tuples: RelationTuple[] = [];
     for (const [relation, subjects] of relations) {
       for (const subject of subjects) {
@@ -348,122 +306,6 @@ export class RelationshipExplorer {
   ) {}
 
   /**
-   * 関係性パスの探索（最短パスを返す）
-   * @param subject 開始エンティティ
-   * @param targetObject 目標エンティティ
-   * @returns 探索結果（パス発見、未発見、深度制限超過）
-   */
-  findRelationPath(
-    subject: EntityId,
-    targetObject: EntityId
-  ): ExplorationResult {
-    // 早期チェック：同一エンティティの場合
-    if (subject === targetObject) {
-      return { type: 'found', path: [] };
-    }
-
-    const queue: SearchState[] = [{ current: subject, path: [], depth: 0 }];
-    // 引数subjectは初回に探索するため、訪問済としておく
-    const visited = new Set<EntityId>([ subject ]);
-
-    while (queue.length > 0) {
-      const item = queue.shift();
-      if (!item) break; // 実際には発生し得ないが、型ガードする(`!`の回避)
-      const { current, path, depth } = item;
-
-      // BFSなので、どこか1箇所でもmaxDepthを超過したら、全体を打ち切ってしまって良い
-      if (depth >= this.config.maxDepth) {
-        return { type: 'max-depth-exceeded', maxDepth: this.config.maxDepth };
-      }
-
-      const relations = this.graph.getRelations(current);
-      for (const tuple of relations) {
-        if (tuple.object === targetObject) {
-          return { type: 'found', path: [ ...path, tuple ] };
-        }
-
-        if(visited.has(tuple.object)) continue;
-        visited.add(tuple.object);
-
-        // 次の深さではobjectをcurrentとして探索できるよう、queueに入れておく
-        queue.push({
-          current: tuple.object,
-          path: [ ...path, tuple ],
-          depth: depth + 1
-        });
-      }
-    }
-
-    return { type: 'not-found' };
-  }
-
-  /**
-   * 特定のsubjectとrelationから始まるパスを探索
-   *
-   * このメソッドは「最短パスが必ずしも有効なパスではない」問題を解決するために使用されます。
-   *
-   * @param subject 開始エンティティ
-   * @param targetObject 目標エンティティ
-   * @param targetRelation 最初のステップで必要な関係タイプ
-   * @returns 探索結果（パス発見、未発見、深度制限超過）
-   *
-   * @example
-   * // 使用例：aliceがeditor関係でdocumentにアクセスできるかチェック
-   * const result = explorer.findPathStartingWithRelation('alice', 'document', 'editor');
-   *
-   * // 期待される動作：
-   * // 1. aliceから直接editor関係があるかチェック：alice --editor--> document
-   * // 2. なければ推移的なパスを探索：alice --memberOf--> team --editor--> document
-   * // 3. 見つからなければnot-foundを返す
-   */
-  findPathWithRelation(
-    subject: EntityId,
-    targetObject: EntityId,
-    targetRelation: RelationType
-  ): ExplorationResult {
-    if (this.graph.hasDirectRelation(subject, targetRelation, targetObject)) {
-      return {
-        type: 'found',
-        path: [{ subject, relation: targetRelation, object: targetObject }]
-      };
-    }
-
-    const queue: SearchState[] = [{ current: subject, path: [], depth: 0 }];
-    // 引数subjectは初回に探索するため、訪問済としておく
-    const visited = new Set<EntityId>([ subject ]);
-
-    while (queue.length > 0) {
-      const item = queue.shift();
-      if (!item) break; // 実際には発生し得ないが、型ガードする(`!`の回避)
-      const { current, path, depth } = item;
-
-      // BFSなので、どこか1箇所でもmaxDepthを超過したら、全体を打ち切ってしまって良い
-      if (depth >= this.config.maxDepth) {
-        return { type: 'max-depth-exceeded', maxDepth: this.config.maxDepth };
-      }
-
-      const relations = this.graph.getRelations(current);
-      for (const tuple of relations) {
-        if (tuple.object === targetObject && tuple.relation === targetRelation) {
-          return { type: 'found', path: [ ...path, tuple ] };
-        }
-
-        if(visited.has(tuple.object)) continue;
-        visited.add(tuple.object);
-
-        // 次の深さではobjectをcurrentとして探索できるよう、queueに入れておく
-        queue.push({
-          current: tuple.object,
-          path: [ ...path, tuple ],
-          depth: depth + 1
-        });
-      }
-    }
-
-    return { type: 'not-found' };
-  }
-
-  /**
    * 関係性を取得する
    *
    * 既存のReBAC実装に従い、直接関係のチェック→BFSの順で、関係性を取得する
@@ -482,7 +324,7 @@ export class RelationshipExplorer {
     subject: EntityId,
     targetObject: EntityId,
     targetRelations: ReadonlySet<RelationType>
-  ): MultiRelationExplorationResult {
+  ): ExplorationResult {
     // 直接関係をチェック
     // 直接関係チェックはなくても機能的には問題ないが、BFSによる探索を行わなくて済み、パフォーマンス面で良い
     // 既存のReBACの実装も同等となっていることから、今回も実装を残しておく
