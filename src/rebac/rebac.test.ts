@@ -1567,6 +1567,278 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           expect(readResult.type).toBe('granted');
         })
       });
+
+      describe('複数の有効な権限関係が同時に存在する場合', () => {
+        it('直接editor関係とチーム経由のowns関係が両方ある場合、最初に見つかった関係を返すこと', () => {
+          const graph = new RelationGraph();
+          
+          // パス1: alice → document (直接editor - 距離1)
+          graph.addRelation({
+            subject: 'alice',
+            relation: 'editor',  // write権限あり
+            object: 'document'
+          });
+          
+          // パス2: alice → team → document (チーム経由owns - 距離2)
+          graph.addRelation({
+            subject: 'alice',
+            relation: 'memberOf',
+            object: 'team'
+          });
+          graph.addRelation({
+            subject: 'team',
+            relation: 'owns',  // write権限あり
+            object: 'document'
+          });
+          
+          const resource = new ReBACProtectedResource('document', graph);
+          const result = resource.checkValidRelation('alice', 'write');
+          
+          // 両方の関係がwrite権限を持つが、最短パス（editor）が優先される
+          expect(result).toEqual({
+            type: 'granted',
+            relation: 'editor',  // 直接関係が優先
+            path: [{
+              subject: 'alice',
+              relation: 'editor',
+              object: 'document'
+            }]
+          });
+        });
+
+        it('同じ深さで複数の有効な関係がある場合、最初にチェックされた関係を返すこと', () => {
+          const graph = new RelationGraph();
+          
+          // 両方とも距離2の異なる有効なパス
+          // パス1: alice → team1 → document (editor経由)
+          graph.addRelation({
+            subject: 'alice',
+            relation: 'memberOf',
+            object: 'team1'
+          });
+          graph.addRelation({
+            subject: 'team1',
+            relation: 'editor',
+            object: 'document'
+          });
+          
+          // パス2: alice → team2 → document (owns経由)
+          graph.addRelation({
+            subject: 'alice',
+            relation: 'memberOf',
+            object: 'team2'
+          });
+          graph.addRelation({
+            subject: 'team2',
+            relation: 'owns',
+            object: 'document'
+          });
+          
+          const resource = new ReBACProtectedResource('document', graph);
+          const result = resource.checkValidRelation('alice', 'write');
+          
+          expect(result.type).toBe('granted');
+          // BFSの探索順序により、どちらかの関係が返される
+          expect(['editor', 'owns']).toContain(result.relation);
+          expect(result.path).toHaveLength(2);
+        });
+      });
+
+      describe('複雑なグラフ構造での探索', () => {
+        it('中間ノードから複数のパスが分岐する場合でも正しく探索すること', () => {
+          const graph = new RelationGraph();
+          
+          // alice → team → 複数のドキュメントへ分岐
+          graph.addRelation({
+            subject: 'alice',
+            relation: 'memberOf',
+            object: 'team'
+          });
+          
+          // teamから複数のドキュメントへの異なる関係
+          graph.addRelation({
+            subject: 'team',
+            relation: 'viewer',
+            object: 'doc1'
+          });
+          graph.addRelation({
+            subject: 'team',
+            relation: 'editor',
+            object: 'doc2'
+          });
+          graph.addRelation({
+            subject: 'team',
+            relation: 'owns',
+            object: 'doc3'
+          });
+          
+          // 追加の複雑さ: teamからorgへの関係もある
+          graph.addRelation({
+            subject: 'team',
+            relation: 'memberOf',
+            object: 'org'
+          });
+          graph.addRelation({
+            subject: 'org',
+            relation: 'owns',
+            object: 'doc4'
+          });
+          
+          const resource2 = new ReBACProtectedResource('doc2', graph);
+          const resource3 = new ReBACProtectedResource('doc3', graph);
+          const resource4 = new ReBACProtectedResource('doc4', graph);
+          
+          // doc2へのwrite権限（editor経由）
+          const result2 = resource2.checkValidRelation('alice', 'write');
+          expect(result2).toEqual({
+            type: 'granted',
+            relation: 'editor',
+            path: [
+              { subject: 'alice', relation: 'memberOf', object: 'team' },
+              { subject: 'team', relation: 'editor', object: 'doc2' }
+            ]
+          });
+          
+          // doc3へのwrite権限（owns経由）
+          const result3 = resource3.checkValidRelation('alice', 'write');
+          expect(result3).toEqual({
+            type: 'granted',
+            relation: 'owns',
+            path: [
+              { subject: 'alice', relation: 'memberOf', object: 'team' },
+              { subject: 'team', relation: 'owns', object: 'doc3' }
+            ]
+          });
+          
+          // doc4への3ホップのパス
+          const result4 = resource4.checkValidRelation('alice', 'write');
+          expect(result4).toEqual({
+            type: 'granted',
+            relation: 'owns',
+            path: [
+              { subject: 'alice', relation: 'memberOf', object: 'team' },
+              { subject: 'team', relation: 'memberOf', object: 'org' },
+              { subject: 'org', relation: 'owns', object: 'doc4' }
+            ]
+          });
+        });
+
+        it('異なる深さで同じ権限タイプが見つかる場合、最短のものを選択すること', () => {
+          const graph = new RelationGraph();
+          
+          // 深さ1: viewer権限のみ
+          graph.addRelation({
+            subject: 'alice',
+            relation: 'viewer',
+            object: 'document'
+          });
+          
+          // 深さ2: viewer権限（別経路）
+          graph.addRelation({
+            subject: 'alice',
+            relation: 'memberOf',
+            object: 'team1'
+          });
+          graph.addRelation({
+            subject: 'team1',
+            relation: 'viewer',
+            object: 'document'
+          });
+          
+          // 深さ3: editor権限（write可能）
+          graph.addRelation({
+            subject: 'alice',
+            relation: 'memberOf',
+            object: 'org'
+          });
+          graph.addRelation({
+            subject: 'org',
+            relation: 'memberOf',
+            object: 'team2'
+          });
+          graph.addRelation({
+            subject: 'team2',
+            relation: 'editor',
+            object: 'document'
+          });
+          
+          const resource = new ReBACProtectedResource('document', graph);
+          
+          // read権限: 最短のviewer（深さ1）が使われる
+          const readResult = resource.checkValidRelation('alice', 'read');
+          expect(readResult).toEqual({
+            type: 'granted',
+            relation: 'viewer',
+            path: [{
+              subject: 'alice',
+              relation: 'viewer',
+              object: 'document'
+            }]
+          });
+          
+          // write権限: viewerでは不十分なので、深さ3のeditorが見つかる
+          const writeResult = resource.checkValidRelation('alice', 'write');
+          expect(writeResult).toEqual({
+            type: 'granted',
+            relation: 'editor',
+            path: [
+              { subject: 'alice', relation: 'memberOf', object: 'org' },
+              { subject: 'org', relation: 'memberOf', object: 'team2' },
+              { subject: 'team2', relation: 'editor', object: 'document' }
+            ]
+          });
+        });
+
+        it('ダイヤモンド型のグラフ構造でも正しく最短パスを見つけること', () => {
+          const graph = new RelationGraph();
+          
+          /*
+           * ダイヤモンド構造:
+           *     alice
+           *     /    \
+           *  team1  team2
+           *     \    /
+           *    document
+           */
+          
+          // 左側のパス: alice → team1 → document (viewer)
+          graph.addRelation({
+            subject: 'alice',
+            relation: 'memberOf',
+            object: 'team1'
+          });
+          graph.addRelation({
+            subject: 'team1',
+            relation: 'viewer',
+            object: 'document'
+          });
+          
+          // 右側のパス: alice → team2 → document (editor)
+          graph.addRelation({
+            subject: 'alice',
+            relation: 'manages',
+            object: 'team2'
+          });
+          graph.addRelation({
+            subject: 'team2',
+            relation: 'editor',
+            object: 'document'
+          });
+          
+          const resource = new ReBACProtectedResource('document', graph);
+          
+          // write権限をチェック - editor関係を持つパスが選ばれる
+          const result = resource.checkValidRelation('alice', 'write');
+          expect(result).toEqual({
+            type: 'granted',
+            relation: 'editor',
+            path: [
+              { subject: 'alice', relation: 'manages', object: 'team2' },
+              { subject: 'team2', relation: 'editor', object: 'document' }
+            ]
+          });
+        });
+      });
     })
     
     describe('getRequiredRelations', () => {
