@@ -21,16 +21,36 @@ export type PermissionBits = {
 /** 権限アクション */
 export type PermissionAction = keyof PermissionBits;
 
-/** 関係性の種類 */
-export type RelationType = 
-  | 'owns'        // 所有関係
+/** エンティティ間の関係タイプ */
+export type EntityRelationType = 
   | 'manages'     // 管理関係
-  | 'memberOf'    // 所属関係
+  | 'memberOf'    // 所属関係  
   | 'delegatedBy' // 委譲関係
-  | 'viewer'      // 閲覧者権限
-  | 'editor';     // 編集者権限
 
-/** 関係性タプル */
+/** リソースへのアクセス関係タイプ */
+export type ResourceRelationType = 
+  | 'owns'        // 所有関係
+  | 'viewer'      // 閲覧者権限
+  | 'editor'      // 編集者権限
+
+/** 関係性の種類（統合型・既存コードとの互換性のため維持） */
+export type RelationType = EntityRelationType | ResourceRelationType
+
+/** エンティティ間の関係タプル */
+export interface EntityRelationTuple {
+  subject: EntityId           // ユーザーまたはグループ
+  relation: EntityRelationType // エンティティ間の関係
+  object: EntityId            // グループまたはユーザー
+}
+
+/** リソースへの関係タプル */
+export interface ResourceRelationTuple {
+  subject: EntityId             // ユーザーまたはグループ
+  relation: ResourceRelationType // リソースへのアクセス関係
+  object: EntityId              // リソース（ドキュメント）
+}
+
+/** 関係性タプル（統合型・既存コードとの互換性のため維持） */
 export interface RelationTuple {
   subject: EntityId;     // 主体（ユーザーやグループ）
   relation: RelationType; // 関係の種類
@@ -96,17 +116,12 @@ export type ReBACDecision =
 // デフォルト設定
 // ============================================================
 
-/** デフォルトの権限ルール */
+/** デフォルトの権限ルール（リソースへのアクセス権限のみ） */
 export const DEFAULT_PERMISSION_RULES: PermissionRule[] = [
   { 
     relation: 'owns', 
     permissions: { read: true, write: true }, 
     description: '所有者は全権限' 
-  },
-  { 
-    relation: 'manages', 
-    permissions: { read: true, write: true }, 
-    description: '管理者は全権限' 
   },
   { 
     relation: 'editor', 
@@ -146,9 +161,11 @@ export class RelationGraph {
   }
 
   /**
-   * 関係性を追加
-   * @param tuple 追加する関係性タプル
+   * 関係性を追加（型安全なオーバーロード）
    */
+  addRelation(tuple: EntityRelationTuple): void;
+  addRelation(tuple: ResourceRelationTuple): void;
+  addRelation(tuple: RelationTuple): void;
   addRelation(tuple: RelationTuple): void {
     // 順方向: subject -> relation -> objects
     const subjectRelations = this.adjacencyList.get(tuple.subject) ?? new Map();
