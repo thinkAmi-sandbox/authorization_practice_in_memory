@@ -486,7 +486,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
             path: [relation]
           });
         })
-        it('直接関係（異なる関係タイプ）でも到達可能ならパスを返すこと', () => {
+        it('直接関係（異なる関係タイプ）では見つからないこと', () => {
           const graph = new RelationGraph();
           const relation: RelationTuple = {
             subject: 'user1',
@@ -499,8 +499,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           const result = explorer.findPathWithRelation('user1', 'doc1', 'editor');
           
           expect(result).toEqual({
-            type: 'found',
-            path: [relation]
+            type: 'not-found'
           });
         })
         it('間接関係（2ホップ）のパスを返すこと', () => {

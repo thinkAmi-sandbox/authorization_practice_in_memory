@@ -429,7 +429,7 @@ export class RelationshipExplorer {
 
       const relations = this.graph.getRelations(current);
       for (const tuple of relations) {
-        if (tuple.object === targetObject) {
+        if (tuple.object === targetObject && tuple.relation === targetRelation) {
           return { type: 'found', path: [ ...path, tuple ] };
         }
 
