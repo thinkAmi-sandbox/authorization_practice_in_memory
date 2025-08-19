@@ -95,6 +95,21 @@ export type ExplorationResult =
       maxDepth: number;
     };
 
+/** 複数関係探索の結果型 */
+export type MultiRelationExplorationResult = 
+  | {
+      type: 'found';
+      path: RelationPath;
+      matchedRelation: RelationType;
+    }
+  | {
+      type: 'not-found';
+    }
+  | {
+      type: 'max-depth-exceeded';
+      maxDepth: number;
+    };
+
 /** ReBAC判定結果（Tagged Union） */
 export type ReBACDecision = 
   | { 
@@ -447,6 +462,78 @@ export class RelationshipExplorer {
 
     return { type: 'not-found' };
   }
+
+  /**
+   * 複数の関係のいずれかで、特定のsubjectからtargetObjectへのパスを探索
+   * 
+   * 一度の探索で複数の関係をチェックし、パフォーマンスを向上させる
+   * 
+   * @param subject 開始エンティティ
+   * @param targetObject 目標エンティティ
+   * @param targetRelations チェック対象の関係タイプのセット
+   * @returns 探索結果（パス発見、未発見、深度制限超過）と発見された関係
+   * 
+   * @example
+   * // 複数の関係を一度にチェック
+   * const relations = new Set(['viewer', 'editor', 'owns']);
+   * const result = explorer.findPathWithAnyRelation('alice', 'document', relations);
+   */
+  findPathWithAnyRelation(
+    subject: EntityId,
+    targetObject: EntityId,
+    targetRelations: ReadonlySet<RelationType>
+  ): MultiRelationExplorationResult {
+    // 直接関係をチェック（複数の関係を一度にチェック）
+    for (const relation of targetRelations) {
+      if (this.graph.hasDirectRelation(subject, relation, targetObject)) {
+        return {
+          type: 'found',
+          path: [{ subject, relation, object: targetObject }],
+          matchedRelation: relation
+        };
+      }
+    }
+
+    // BFS探索（一度の探索で完了）
+    const queue: SearchState[] = [{ current: subject, path: [], depth: 0 }];
+    const visited = new Set<EntityId>([subject]);
+
+    while (queue.length > 0) {
+      const item = queue.shift();
+      if (!item) break;
+      const { current, path, depth } = item;
+
+      if (depth >= this.config.maxDepth) {
+        return { 
+          type: 'max-depth-exceeded', 
+          maxDepth: this.config.maxDepth 
+        };
+      }
+
+      const relations = this.graph.getRelations(current);
+      for (const tuple of relations) {
+        // targetObjectに到達し、かつ必要な関係のいずれかに合致する場合
+        if (tuple.object === targetObject && targetRelations.has(tuple.relation)) {
+          return { 
+            type: 'found', 
+            path: [...path, tuple],
+            matchedRelation: tuple.relation
+          };
+        }
+
+        if (visited.has(tuple.object)) continue;
+        visited.add(tuple.object);
+
+        queue.push({
+          current: tuple.object,
+          path: [...path, tuple],
+          depth: depth + 1
+        });
+      }
+    }
+
+    return { type: 'not-found' };
+  }
 }
 
 // ============================================================
@@ -512,7 +599,7 @@ export class ReBACProtectedResource {
   }
 
   /**
-   * 複数の関係性に基づいて権限をチェック
+   * 複数の関係性に基づいて権限をチェック（改善版）
    * @param subject チェック対象の主体
    * @param action 実行したいアクション
    * @returns 権限判定結果
@@ -520,35 +607,34 @@ export class ReBACProtectedResource {
   checkValidRelation(subject: EntityId, action: PermissionAction): ReBACDecision {
     const requiredRelations = this.getRequiredRelations(action);
 
-    let isMaxDepthExceeded = false;
-    for(const relation of requiredRelations) {
-      const result = this.explorer.findPathWithRelation(subject, this.resourceId, relation);
+    // 一度の探索で複数の関係をチェック
+    const result = this.explorer.findPathWithAnyRelation(
+      subject, 
+      this.resourceId, 
+      requiredRelations
+    );
 
-      switch (result.type) {
-        case 'found':
-          return { type: 'granted', path: result.path, relation: relation };
+    switch (result.type) {
+      case 'found':
+        return { 
+          type: 'granted', 
+          path: result.path, 
+          relation: result.matchedRelation
+        };
 
-        case 'max-depth-exceeded':
-          isMaxDepthExceeded = true;
-          break;
+      case 'max-depth-exceeded':
+        return {
+          type: 'denied',
+          reason: 'max-depth-exceeded',
+          maxDepth: result.maxDepth
+        };
 
-        default:
-          break;
-      }
-    }
-
-    if (isMaxDepthExceeded) {
-      return {
-        type: 'denied',
-        reason: 'max-depth-exceeded',
-        maxDepth: this.config?.maxDepth ?? DEFAULT_CONFIG.maxDepth
-      }
-    } else {
-      return {
-        type: 'denied',
-        reason: 'no-relation',
-        searchedRelations: Array.from(requiredRelations)
-      }
+      case 'not-found':
+        return {
+          type: 'denied',
+          reason: 'no-relation',
+          searchedRelations: Array.from(requiredRelations)
+        };
     }
   }
 
