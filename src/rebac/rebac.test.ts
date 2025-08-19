@@ -809,6 +809,555 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
         })
       })
     })
+
+    describe('findPathWithAnyRelation', () => {
+      describe('基本的な探索', () => {
+        it('直接関係（単一関係タイプ）のパスを返すこと', () => {
+          const graph = new RelationGraph();
+          const relation: RelationTuple = {
+            subject: 'user1',
+            relation: 'editor',
+            object: 'doc1'
+          };
+          graph.addRelation(relation);
+          
+          const explorer = new RelationshipExplorer(graph);
+          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['editor']));
+          
+          expect(result).toEqual({
+            type: 'found',
+            path: [relation],
+            matchedRelation: 'editor'
+          });
+        })
+        it('直接関係（複数関係タイプのいずれか）のパスを返すこと', () => {
+          const graph = new RelationGraph();
+          const relation: RelationTuple = {
+            subject: 'user1',
+            relation: 'viewer',
+            object: 'doc1'
+          };
+          graph.addRelation(relation);
+          
+          const explorer = new RelationshipExplorer(graph);
+          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['editor', 'viewer', 'owns']));
+          
+          expect(result).toEqual({
+            type: 'found',
+            path: [relation],
+            matchedRelation: 'viewer'
+          });
+        })
+        it('間接関係（2ホップ）のパスを返すこと', () => {
+          const graph = new RelationGraph();
+          const relation1: RelationTuple = {
+            subject: 'user1',
+            relation: 'memberOf',
+            object: 'team1'
+          };
+          const relation2: RelationTuple = {
+            subject: 'team1',
+            relation: 'editor',
+            object: 'doc1'
+          };
+          
+          graph.addRelation(relation1);
+          graph.addRelation(relation2);
+          
+          const explorer = new RelationshipExplorer(graph);
+          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['editor', 'owns']));
+          
+          expect(result).toEqual({
+            type: 'found',
+            path: [relation1, relation2],
+            matchedRelation: 'editor'
+          });
+        })
+        it('間接関係（3ホップ）のパスを返すこと', () => {
+          const graph = new RelationGraph();
+          const relation1: RelationTuple = {
+            subject: 'user1',
+            relation: 'memberOf',
+            object: 'team1'
+          };
+          const relation2: RelationTuple = {
+            subject: 'team1',
+            relation: 'memberOf',
+            object: 'org1'
+          };
+          const relation3: RelationTuple = {
+            subject: 'org1',
+            relation: 'owns',
+            object: 'doc1'
+          };
+          
+          graph.addRelation(relation1);
+          graph.addRelation(relation2);
+          graph.addRelation(relation3);
+          
+          const explorer = new RelationshipExplorer(graph);
+          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['owns', 'editor']));
+          
+          expect(result).toEqual({
+            type: 'found',
+            path: [relation1, relation2, relation3],
+            matchedRelation: 'owns'
+          });
+        })
+        it('関係が存在しない場合not-foundを返すこと', () => {
+          const graph = new RelationGraph();
+          const explorer = new RelationshipExplorer(graph);
+          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['editor', 'owns']));
+          
+          expect(result).toEqual({
+            type: 'not-found'
+          });
+        })
+        it('空のSetを渡した場合not-foundを返すこと', () => {
+          const graph = new RelationGraph();
+          const relation: RelationTuple = {
+            subject: 'user1',
+            relation: 'editor',
+            object: 'doc1'
+          };
+          graph.addRelation(relation);
+          
+          const explorer = new RelationshipExplorer(graph);
+          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set([]));
+          
+          expect(result).toEqual({
+            type: 'not-found'
+          });
+        })
+      })
+      
+      describe('同一エンティティの探索', () => {
+        it('subjectとtargetObjectが同じ場合、not-foundを返すこと', () => {
+          const graph = new RelationGraph();
+          const explorer = new RelationshipExplorer(graph);
+          
+          const result = explorer.findPathWithAnyRelation('user1', 'user1', new Set(['editor', 'owns']));
+          
+          expect(result).toEqual({
+            type: 'not-found'
+          });
+        })
+        
+        it('自己参照の関係がある場合、その関係をパスとして返すこと', () => {
+          const graph = new RelationGraph();
+          const selfRelation: RelationTuple = {
+            subject: 'group1',
+            relation: 'manages',
+            object: 'group1'
+          };
+          graph.addRelation(selfRelation);
+          
+          const explorer = new RelationshipExplorer(graph);
+          const result = explorer.findPathWithAnyRelation('group1', 'group1', new Set(['manages', 'owns']));
+          
+          expect(result).toEqual({
+            type: 'found',
+            path: [selfRelation],
+            matchedRelation: 'manages'
+          });
+        })
+      })
+      
+      describe('最短パス保証', () => {
+        it('複数パスが存在する場合、最短パスを返すこと', () => {
+          const graph = new RelationGraph();
+          // 短いパス（1ホップ）
+          const directRelation: RelationTuple = {
+            subject: 'user1',
+            relation: 'owns',
+            object: 'doc1'
+          };
+          // 長いパス（2ホップ）
+          const indirectRelation1: RelationTuple = {
+            subject: 'user1',
+            relation: 'memberOf',
+            object: 'team1'
+          };
+          const indirectRelation2: RelationTuple = {
+            subject: 'team1',
+            relation: 'editor',
+            object: 'doc1'
+          };
+          
+          graph.addRelation(directRelation);
+          graph.addRelation(indirectRelation1);
+          graph.addRelation(indirectRelation2);
+          
+          const explorer = new RelationshipExplorer(graph);
+          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['owns', 'editor']));
+          
+          expect(result).toEqual({
+            type: 'found',
+            path: [directRelation],
+            matchedRelation: 'owns'
+          });
+        })
+        
+        it('同じ深さで複数の有効な関係がある場合、最初に見つかった関係を返すこと', () => {
+          const graph = new RelationGraph();
+          
+          // 両方とも距離2、ただし、それぞれ異なる有効なパス
+          // パス1: alice → team1 → document (editor経由)
+          graph.addRelation({
+            subject: 'alice',
+            relation: 'memberOf',
+            object: 'team1'
+          });
+          graph.addRelation({
+            subject: 'team1',
+            relation: 'editor',
+            object: 'document'
+          });
+          
+          // パス2: alice → team2 → document (owns経由)
+          graph.addRelation({
+            subject: 'alice',
+            relation: 'memberOf',
+            object: 'team2'
+          });
+          graph.addRelation({
+            subject: 'team2',
+            relation: 'owns',
+            object: 'document'
+          });
+          
+          const explorer = new RelationshipExplorer(graph);
+          const result = explorer.findPathWithAnyRelation('alice', 'document', new Set(['editor', 'owns']));
+
+          expect(result).toEqual({
+            type: 'found',
+            matchedRelation: 'editor',
+            path: [
+              { subject: 'alice', relation: 'memberOf', object: 'team1' },
+              { subject: 'team1', relation: 'editor', object: 'document' }
+            ]
+          });
+        })
+        
+        it('異なる関係タイプで異なる深さのパスがある場合、最短を選択すること', () => {
+          const graph = new RelationGraph();
+          
+          // 深さ2: editor経由のパス
+          graph.addRelation({
+            subject: 'user1',
+            relation: 'memberOf',
+            object: 'team1'
+          });
+          graph.addRelation({
+            subject: 'team1',
+            relation: 'editor',
+            object: 'doc1'
+          });
+          
+          // 深さ3: owns経由のパス
+          graph.addRelation({
+            subject: 'user1',
+            relation: 'memberOf',
+            object: 'org1'
+          });
+          graph.addRelation({
+            subject: 'org1',
+            relation: 'memberOf',
+            object: 'team2'
+          });
+          graph.addRelation({
+            subject: 'team2',
+            relation: 'owns',
+            object: 'doc1'
+          });
+          
+          const explorer = new RelationshipExplorer(graph);
+          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['editor', 'owns']));
+          
+          expect(result).toEqual({
+            type: 'found',
+            matchedRelation: 'editor',
+            path: [
+              { subject: 'user1', relation: 'memberOf', object: 'team1' },
+              { subject: 'team1', relation: 'editor', object: 'doc1' }
+            ]
+          });
+        })
+      })
+      
+      describe('深度制限', () => {
+        it('maxDepth内で指定関係タイプのパスが見つかればパスを返すこと', () => {
+          const graph = new RelationGraph();
+          const relation1: RelationTuple = {
+            subject: 'user1',
+            relation: 'memberOf',
+            object: 'team1'
+          };
+          const relation2: RelationTuple = {
+            subject: 'team1',
+            relation: 'editor',
+            object: 'doc1'
+          };
+          
+          graph.addRelation(relation1);
+          graph.addRelation(relation2);
+          
+          const explorer = new RelationshipExplorer(graph, { maxDepth: 3 });
+          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['editor', 'owns']));
+          
+          expect(result).toEqual({
+            type: 'found',
+            path: [relation1, relation2],
+            matchedRelation: 'editor'
+          });
+        })
+        it('maxDepthを超える場合max-depth-exceededを返すこと', () => {
+          const graph = new RelationGraph();
+          const relation1: RelationTuple = {
+            subject: 'user1',
+            relation: 'memberOf',
+            object: 'team1'
+          };
+          const relation2: RelationTuple = {
+            subject: 'team1',
+            relation: 'memberOf',
+            object: 'org1'
+          };
+          const relation3: RelationTuple = {
+            subject: 'org1',
+            relation: 'editor',
+            object: 'doc1'
+          };
+          
+          graph.addRelation(relation1);
+          graph.addRelation(relation2);
+          graph.addRelation(relation3);
+          
+          const explorer = new RelationshipExplorer(graph, { maxDepth: 2 });
+          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['editor', 'owns']));
+          
+          expect(result).toEqual({
+            type: 'max-depth-exceeded',
+            maxDepth: 2
+          });
+        })
+        it('複数関係のうち一部だけがmaxDepthを超える場合の挙動', () => {
+          const graph = new RelationGraph();
+          
+          // 深さ2: editor経由のパス（maxDepth内）
+          graph.addRelation({
+            subject: 'user1',
+            relation: 'memberOf',
+            object: 'team1'
+          });
+          graph.addRelation({
+            subject: 'team1',
+            relation: 'editor',
+            object: 'doc1'
+          });
+          
+          // 深さ3: owns経由のパス（maxDepthを超える）
+          graph.addRelation({
+            subject: 'user1',
+            relation: 'memberOf',
+            object: 'org1'
+          });
+          graph.addRelation({
+            subject: 'org1',
+            relation: 'memberOf',
+            object: 'team2'
+          });
+          graph.addRelation({
+            subject: 'team2',
+            relation: 'owns',
+            object: 'doc1'
+          });
+          
+          const explorer = new RelationshipExplorer(graph, { maxDepth: 2 });
+          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['editor', 'owns']));
+          
+          // maxDepth内で見つかるeditorパスが返される
+          expect(result).toEqual({
+            type: 'found',
+            matchedRelation: 'editor',
+            path: [
+              { subject: 'user1', relation: 'memberOf', object: 'team1' },
+              { subject: 'team1', relation: 'editor', object: 'doc1' }
+            ]
+          });
+        })
+      })
+      
+      describe('循環参照', () => {
+        it('循環があっても無限ループしないこと', () => {
+          const graph = new RelationGraph();
+          // 循環参照を作成
+          const relation1: RelationTuple = {
+            subject: 'user1',
+            relation: 'memberOf',
+            object: 'team1'
+          };
+          const relation2: RelationTuple = {
+            subject: 'team1',
+            relation: 'memberOf',
+            object: 'user1'
+          };
+          const relation3: RelationTuple = {
+            subject: 'user1',
+            relation: 'editor',
+            object: 'doc1'
+          };
+          
+          graph.addRelation(relation1);
+          graph.addRelation(relation2);
+          graph.addRelation(relation3);
+          
+          const explorer = new RelationshipExplorer(graph);
+          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['editor', 'owns']));
+          
+          expect(result).toEqual({
+            type: 'found',
+            path: [relation3],
+            matchedRelation: 'editor'
+          });
+        })
+        
+        it('循環参照がある場合でも間接的なパスを正しく見つけること', () => {
+          const graph = new RelationGraph();
+          // 循環参照を作成
+          const cycleRelation1: RelationTuple = {
+            subject: 'team1',
+            relation: 'memberOf',
+            object: 'org1'
+          };
+          const cycleRelation2: RelationTuple = {
+            subject: 'org1',
+            relation: 'memberOf',
+            object: 'team1'
+          };
+          // 有効なパス
+          const validRelation1: RelationTuple = {
+            subject: 'user1',
+            relation: 'memberOf',
+            object: 'team1'
+          };
+          const validRelation2: RelationTuple = {
+            subject: 'team1',
+            relation: 'owns',
+            object: 'doc1'
+          };
+          
+          graph.addRelation(cycleRelation1);
+          graph.addRelation(cycleRelation2);
+          graph.addRelation(validRelation1);
+          graph.addRelation(validRelation2);
+          
+          const explorer = new RelationshipExplorer(graph);
+          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['owns', 'editor']));
+          
+          expect(result).toEqual({
+            type: 'found',
+            path: [validRelation1, validRelation2],
+            matchedRelation: 'owns'
+          });
+        })
+      })
+      
+      describe('複数関係タイプの優先順位', () => {
+        it('Set内の複数関係が同時に有効な場合の挙動', () => {
+          const graph = new RelationGraph();
+          
+          // user1は両方の関係を持つ
+          const ownsRelation: RelationTuple = {
+            subject: 'user1',
+            relation: 'owns',
+            object: 'doc1'
+          };
+          const editorRelation: RelationTuple = {
+            subject: 'user1',
+            relation: 'editor',
+            object: 'doc1'
+          };
+          
+          graph.addRelation(ownsRelation);
+          graph.addRelation(editorRelation);
+          
+          const explorer = new RelationshipExplorer(graph);
+          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['owns', 'editor']));
+          
+          // 両方とも深さ1だが、最初に見つかった関係が返される
+          expect(result).toEqual({
+            type: 'found',
+            path: [ownsRelation],
+            matchedRelation: 'owns'
+          });
+        })
+        
+        it('一部の関係だけがマッチする場合の挙動', () => {
+          const graph = new RelationGraph();
+          
+          const relation: RelationTuple = {
+            subject: 'user1',
+            relation: 'viewer',
+            object: 'doc1'
+          };
+          graph.addRelation(relation);
+          
+          const explorer = new RelationshipExplorer(graph);
+          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['owns', 'viewer', 'editor']));
+          
+          expect(result).toEqual({
+            type: 'found',
+            path: [relation],
+            matchedRelation: 'viewer'
+          });
+        })
+        
+        it('全ての関係がマッチしない場合の挙動', () => {
+          const graph = new RelationGraph();
+          
+          const relation: RelationTuple = {
+            subject: 'user1',
+            relation: 'viewer',
+            object: 'doc1'
+          };
+          graph.addRelation(relation);
+          
+          const explorer = new RelationshipExplorer(graph);
+          const result = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['owns', 'editor']));
+          
+          expect(result).toEqual({
+            type: 'not-found'
+          });
+        })
+        
+        it('Set内の関係タイプの順序による影響がないこと', () => {
+          const graph = new RelationGraph();
+          
+          const relation: RelationTuple = {
+            subject: 'user1',
+            relation: 'editor',
+            object: 'doc1'
+          };
+          graph.addRelation(relation);
+          
+          const explorer = new RelationshipExplorer(graph);
+          
+          // 順序を変えても同じ結果になることを確認
+          const result1 = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['owns', 'editor', 'viewer']));
+          const result2 = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['viewer', 'owns', 'editor']));
+          const result3 = explorer.findPathWithAnyRelation('user1', 'doc1', new Set(['editor', 'viewer', 'owns']));
+          
+          expect(result1).toEqual({
+            type: 'found',
+            path: [relation],
+            matchedRelation: 'editor'
+          });
+          expect(result2).toEqual(result1);
+          expect(result3).toEqual(result1);
+        })
+      })
+    })
   })
 
   // 3. ReBACProtectedResourceクラス（約400行）

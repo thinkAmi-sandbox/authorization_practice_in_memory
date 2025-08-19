@@ -399,18 +399,18 @@ export class RelationshipExplorer {
 
   /**
    * 特定のsubjectとrelationから始まるパスを探索
-   * 
+   *
    * このメソッドは「最短パスが必ずしも有効なパスではない」問題を解決するために使用されます。
-   * 
+   *
    * @param subject 開始エンティティ
-   * @param targetObject 目標エンティティ  
+   * @param targetObject 目標エンティティ
    * @param targetRelation 最初のステップで必要な関係タイプ
    * @returns 探索結果（パス発見、未発見、深度制限超過）
-   * 
+   *
    * @example
    * // 使用例：aliceがeditor関係でdocumentにアクセスできるかチェック
    * const result = explorer.findPathStartingWithRelation('alice', 'document', 'editor');
-   * 
+   *
    * // 期待される動作：
    * // 1. aliceから直接editor関係があるかチェック：alice --editor--> document
    * // 2. なければ推移的なパスを探索：alice --memberOf--> team --editor--> document
