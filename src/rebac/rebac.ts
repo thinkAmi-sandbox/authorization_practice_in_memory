@@ -161,12 +161,9 @@ export class RelationGraph {
   }
 
   /**
-   * 関係性を追加（型安全なオーバーロード）
+   * 関係性を追加
    */
-  addRelation(tuple: EntityRelationTuple): void;
-  addRelation(tuple: ResourceRelationTuple): void;
-  addRelation(tuple: RelationTuple): void;
-  addRelation(tuple: RelationTuple): void {
+  addRelation(tuple: EntityRelationTuple | ResourceRelationTuple): void {
     // 順方向: subject -> relation -> objects
     const subjectRelations = this.adjacencyList.get(tuple.subject) ?? new Map();
     if (!this.adjacencyList.has(tuple.subject)) {
