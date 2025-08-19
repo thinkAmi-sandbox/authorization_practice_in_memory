@@ -556,49 +556,6 @@ export class ReBACProtectedResource {
   }
 
   /**
-   * 関係性に基づいて権限をチェック
-   * @param subject チェック対象の主体
-   * @param action 実行したいアクション
-   * @returns 権限判定結果
-   */
-  checkRelation(subject: EntityId, action: PermissionAction): ReBACDecision {
-    const requiredRelations = this.getRequiredRelations(action);
-
-    const result = this.findPathToResource(subject);
-
-    switch (result.type) {
-      case 'not-found':
-        return {
-          type: 'denied',
-          reason: 'no-relation',
-          searchedRelations: Array.from(requiredRelations)
-        }
-
-      case 'max-depth-exceeded':
-        return {
-          type: 'denied',
-          reason: 'max-depth-exceeded',
-          maxDepth: result.maxDepth
-        }
-
-      case 'found':
-        const relations = result.path.map(tuple => tuple.relation);
-
-        const matchedRelation = relations.find(relation => requiredRelations.has(relation as ResourceRelationType)) as ResourceRelationType | undefined;
-        if (matchedRelation) {
-          return { type: 'granted', path: result.path, relation: matchedRelation };
-        }
-
-        // パスは存在していたものの、actionの権限がない
-        return {
-          type: 'denied',
-          reason: 'no-relation',
-          searchedRelations: Array.from(requiredRelations)
-        }
-    }
-  }
-
-  /**
    * 複数の関係性に基づいて権限をチェック（改善版）
    * @param subject チェック対象の主体
    * @param action 実行したいアクション
@@ -649,15 +606,6 @@ export class ReBACProtectedResource {
       .filter(rule => rule.permissions[action])
       .map(rule => rule.relation)
     );
-  }
-
-  /**
-   * リソースへのパスを探索（内部メソッド）
-   * @param subject 主体
-   * @returns 探索結果
-   */
-  private findPathToResource(subject: EntityId): ExplorationResult {
-    return this.explorer.findRelationPath(subject, this.resourceId);
   }
 }
 
