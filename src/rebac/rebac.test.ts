@@ -922,7 +922,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           };
           const relation2: RelationTuple = {
             subject: 'team1',
-            relation: 'memberOf',
+            relation: 'has',
             object: 'user1'
           };
           const relation3: RelationTuple = {
@@ -940,7 +940,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           
           expect(result).toMatchObject({
             type: 'granted',
-            relation: 'manages', // 権限を付与した必要関係性（managesがread権限を持つため）
+            relation: 'owns',
             path: expect.arrayContaining([relation1, relation2, relation3])
           });
         })
@@ -1089,7 +1089,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           };
           const relation2: RelationTuple = {
             subject: 'team1',
-            relation: 'memberOf',
+            relation: 'has',
             object: 'user1'
           };
           const relation3: RelationTuple = {
@@ -1107,7 +1107,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           
           expect(result).toMatchObject({
             type: 'granted',
-            relation: 'manages', // 権限を付与した必要関係性（managesがwrite権限を持つため）
+            relation: 'owns',
             path: expect.arrayContaining([relation1, relation2, relation3])
           });
         })
@@ -1360,7 +1360,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
           };
           const relation2: RelationTuple = {
             subject: 'team1',
-            relation: 'memberOf',
+            relation: 'has',
             object: 'user1'
           };
           const relation3: RelationTuple = {
@@ -1378,7 +1378,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
 
           expect(result).toMatchObject({
             type: 'granted',
-            relation: 'manages', // 権限を付与した必要関係性（managesがwrite権限を持つため）
+            relation: 'owns',
             path: expect.arrayContaining([relation1, relation2, relation3])
           });
         })

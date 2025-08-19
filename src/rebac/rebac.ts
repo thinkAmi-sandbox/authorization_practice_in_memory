@@ -24,7 +24,8 @@ export type PermissionAction = keyof PermissionBits;
 /** エンティティ間の関係タイプ */
 export type EntityRelationType = 
   | 'manages'     // 管理関係
-  | 'memberOf'    // 所属関係  
+  | 'memberOf'    // 所属関係 (user memberOf team)
+  | 'has'         // 所属関係 (team has user)
   | 'delegatedBy' // 委譲関係
 
 /** リソースへのアクセス関係タイプ */
