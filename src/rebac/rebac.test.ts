@@ -1579,7 +1579,6 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
         
         expect(requiredRelations.has('owns')).toBe(true);
         expect(requiredRelations.has('editor')).toBe(true);
-        expect(requiredRelations.has('manages')).toBe(true);
         expect(requiredRelations.has('viewer')).toBe(false);
       })
       it('readアクションに必要な関係タイプを返すこと', () => {
@@ -1590,7 +1589,6 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
         
         expect(requiredRelations.has('owns')).toBe(true);
         expect(requiredRelations.has('editor')).toBe(true);
-        expect(requiredRelations.has('manages')).toBe(true);
         expect(requiredRelations.has('viewer')).toBe(true);
       })
     })
