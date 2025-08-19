@@ -464,9 +464,9 @@ export class RelationshipExplorer {
   }
 
   /**
-   * 複数の関係のいずれかで、特定のsubjectからtargetObjectへのパスを探索
-   * 
-   * 一度の探索で複数の関係をチェックし、パフォーマンスを向上させる
+   * 関係性を取得する
+   *
+   * 既存のReBAC実装に従い、直接関係のチェック→BFSの順で、関係性を取得する
    * 
    * @param subject 開始エンティティ
    * @param targetObject 目標エンティティ
@@ -483,7 +483,26 @@ export class RelationshipExplorer {
     targetObject: EntityId,
     targetRelations: ReadonlySet<RelationType>
   ): MultiRelationExplorationResult {
-    // 直接関係をチェック（複数の関係を一度にチェック）
+    // 直接関係をチェック
+    // 直接関係チェックはなくても機能的には問題ないが、BFSによる探索を行わなくて済み、パフォーマンス面で良い
+    // 既存のReBACの実装も同等となっていることから、今回も実装を残しておく
+    // (以下、Claude Opus 4.1 による調査結果)
+    //
+    //   1. Google Zanzibar
+    //   - Googleの論文では「Check API」の実装で、直接関係を最初にチェックすることが明記
+    //     - 「fast path」と呼ばれ、グラフ探索を避けられる最も効率的なケースとして扱われます。
+    //
+    //   2. SpiceDB（Authzedの実装）
+    //   - 関係チェックの順序
+    //     - 直接関係のチェック（ルックアップ）
+    //     - 計算された関係の評価
+    //     - 再帰的な探索
+    //
+    //   3. Ory Keto
+    //   - 関係チェックの順序
+    //     - ローカルキャッシュのチェック
+    //     - 直接関係のチェック
+    //     - 間接関係の探索
     for (const relation of targetRelations) {
       if (this.graph.hasDirectRelation(subject, relation, targetObject)) {
         return {
@@ -494,7 +513,7 @@ export class RelationshipExplorer {
       }
     }
 
-    // BFS探索（一度の探索で完了）
+    // BFS探索
     const queue: SearchState[] = [{ current: subject, path: [], depth: 0 }];
     const visited = new Set<EntityId>([subject]);
 
@@ -512,7 +531,6 @@ export class RelationshipExplorer {
 
       const relations = this.graph.getRelations(current);
       for (const tuple of relations) {
-        // targetObjectに到達し、かつ必要な関係のいずれかに合致する場合
         if (tuple.object === targetObject && targetRelations.has(tuple.relation)) {
           return { 
             type: 'found', 
