@@ -27,19 +27,19 @@ docs/
 
 ### Phase 1: ディレクトリ構造の作成
 - [x] `docs/abac/` ディレクトリ作成
-- [ ] `docs/abac/adr/` ディレクトリ作成
+- [x] `docs/abac/adr/` ディレクトリ作成
 - [x] `docs/abac/todo-fix-docs.md` 作成（このファイル）
 
 ### Phase 2: 元ファイルの内容整理
 現在の `docs/adr-abac-design.md` から以下の内容を抽出・整理：
 
 #### ADRファイルへの分割（各ファイルは簡潔に）
-- [ ] **001-policy-language.md**
+- [x] **001-policy-language.md**
   - 3.1節: ポリシー言語の設計（DSL vs JSON vs コード埋め込み）
   - 4.1.1節: 関数ベースの条件記述の決定
   - 実装例と具体的な使用方法
 
-- [ ] **002-attribute-system.md**
+- [x] **002-attribute-system.md**
   - 3.2節: 属性の型システム（型安全性 vs 柔軟性）
   - 3.2.2節: 属性の意図的な重複設計
   - 3.2.3節: 属性の最小化（学習用途最適化）
@@ -47,32 +47,32 @@ docs/
   - 2.7節: 属性のカテゴリー構造と文脈の明確化
   - 4.1.2節: 厳密な属性システムの採用決定
 
-- [ ] **003-evaluation-result.md**
+- [x] **003-evaluation-result.md**
   - 3.3節: 評価結果の設計（Simple vs Detailed）
   - 3.3.2節: not-applicableのreasonフィールド設計
   - 3.3.3節: 複数ポリシーマッチ時のルール選択
   - 3.6節: not-applicableの扱い
   - 4.1.3節: Tagged Union採用の決定
 
-- [ ] **004-deny-support.md**
+- [x] **004-deny-support.md**
   - 3.5節: Deny機能の必要性（RBACとABACの根本的な違い）
   - 3.4節: Effect用語選定（permit vs allow）
   - 3.6.3節: Denyポリシーのみの場合の挙動
   - 4.1.4節: 明示的なDenyのサポート決定
 
-- [ ] **005-conflict-resolution.md**
+- [x] **005-conflict-resolution.md**
   - 3.7節: 競合解決戦略（複数ルールマッチ時の処理）
   - 3.7.2節: Deny-Override戦略の詳細な評価ルール
   - 3.8節: ポリシーの組み合わせ設計
   - 4.1.5節: Deny-Override競合解決戦略の採用
 
-- [ ] **006-api-design.md**
+- [x] **006-api-design.md**
   - 3.9節: APIの設計（最小限 vs 完全）
   - 4.1.6節: 最小限のAPI設計の採用
   - 4.2節: メソッド名の選定理由（evaluate）
 
 #### Design Docへの集約
-- [ ] **design-doc.md**
+- [x] **design-doc.md**
   - 2節: コンテキスト全体
     - 2.1節: プロジェクトの背景
     - 2.2節: ABACの位置づけ（RBACからの発展）
@@ -86,14 +86,14 @@ docs/
   - 7節: 結果と影響
 
 #### 独立ファイルとして整理
-- [ ] **examples.md**
+- [x] **examples.md**
   - 6節: 実装例全体
   - 6.1節: 基本的なポリシー定義
   - 6.2節: 評価エンジンの使用例
   - 6.3節: 複合条件の例
   - 6.4節: テスト例
 
-- [ ] **test-strategy.md**
+- [x] **test-strategy.md**
   - 8節: テスト戦略全体
   - 8.1節: テスト構造の設計方針
   - 8.2節: 推奨するテスト構成
@@ -103,21 +103,21 @@ docs/
   - 10節: テストレビューと対応方針
 
 ### Phase 3: メタファイルの作成
-- [ ] **docs/abac/README.md**
+- [x] **docs/abac/README.md**
   - ABACドキュメントの概要
   - 各ファイルへのナビゲーション
   - RBACからの発展としての位置づけ
   - ReBACへの橋渡しとしての役割
 
-- [ ] **docs/abac/adr/README.md**
+- [x] **docs/abac/adr/README.md**
   - ADR一覧
   - 各決定事項の要約
   - 決定間の関連性
   - RBACとの差異、ReBACへの発展の道筋
 
 ### Phase 4: 既存ファイルの処理
-- [ ] `docs/adr-abac-design.md` をアーカイブまたは削除（確認後）
-- [ ] 参考情報（9節）を適切な場所に配置
+- [x] `docs/adr-abac-design.md` をアーカイブ（docs/archive/へ移動済み）
+- [x] 参考情報（9節）をdesign-doc.mdへ統合済み
 
 ## ADRテンプレート
 
@@ -166,12 +166,21 @@ docs/
 
 ## 完了基準
 
-- [ ] すべてのファイルが作成され、内容が適切に分割されている
-- [ ] 各ADRが独立して理解可能
-- [ ] Design Docが包括的な技術説明を提供
-- [ ] テスト戦略が独立したドキュメントとして整理されている
-- [ ] README.mdによるナビゲーションが機能している
-- [ ] 元の長大なファイルが適切に処理されている
+- [x] すべてのファイルが作成され、内容が適切に分割されている
+- [x] 各ADRが独立して理解可能
+- [x] Design Docが包括的な技術説明を提供
+- [x] テスト戦略が独立したドキュメントとして整理されている
+- [x] README.mdによるナビゲーションが機能している
+- [x] 元の長大なファイルが適切に処理されている
+
+## 完了報告
+
+**2025-08-20**: すべてのタスクが完了しました。
+
+- 元の2000行のファイルを12個の管理しやすいファイルに分割
+- ReBACと同じディレクトリ構造を採用
+- 各ADRは100-150行、Design Docは約500行に収束
+- 学習効果を重視した構成で再編成完了
 
 ## ABACドキュメント固有の考慮事項
 
