@@ -595,7 +595,7 @@ const relationshipPolicy: PolicyRule = {
 - [ACL実装のADR](../adr-acl-design.md)
 - [RBAC実装のADR](../adr-rbac-design.md)
 - [ABAC実装のADR](../adr-abac-design.md)
-- [ReBAC実装のADR](../adr-rebac-design.md)
+- [ReBAC実装のADR](../archive/adr-rebac-design.md)
 
 ### 詳細なADR
 
