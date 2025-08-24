@@ -75,9 +75,9 @@ export class AccessControlList {
     const matchEntries = this.resource.entries.filter((entry) => {
       switch (entry.subject.type) {
         case 'user':
-          return entry.subject.name === request.subject.user
+          return entry.subject.name === request.subject.user && entry.permissions[request.action]
         case 'group':
-          return request.subject.groups.includes(entry.subject.name)
+          return request.subject.groups.includes(entry.subject.name) && entry.permissions[request.action]
       }
     })
 
