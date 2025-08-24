@@ -1,14 +1,12 @@
-import { describe, test, expect, it } from 'bun:test'
+import { describe, expect, it } from 'bun:test'
 import {
   AccessControlList,
-  createPermissionBits,
-  ALLOW_PATTERNS,
-  type Entry,
-  type Subject,
   type AccessRequest,
-  type AccessDecision,
-  Resource,
-  DENY_PATTERNS
+  ALLOW_PATTERNS,
+  DENY_PATTERNS,
+  type Entry,
+  type Resource,
+  type Subject
 } from './acl'
 
 describe('ACL (Access Control List)', () => {
@@ -17,7 +15,6 @@ describe('ACL (Access Control List)', () => {
     const anotherUserSubject: Subject = { type: 'user', name: 'another_user' }
     const myGroupSubject1: Subject = { type: 'group', name: 'my_group_1' }
     const myGroupSubject2: Subject = { type: 'group', name: 'my_group_2' }
-    const anotherGroupSubject: Subject = { type: 'group', name: 'another_user' }
 
     describe('読み込み権限', () => {
       describe('ユーザーやユーザーが所属するグループに対して、許可や拒否が未設定', () => {
@@ -241,7 +238,11 @@ describe('ACL (Access Control List)', () => {
 
             const actual = acl.resolveAccess(request)
 
-            expect(actual).toEqual({ type: 'denied', allowEntries: [allowEntry], denyEntry: denyEntry })
+            expect(actual).toEqual({
+              type: 'denied',
+              allowEntries: [allowEntry],
+              denyEntry: denyEntry
+            })
           })
         })
 
@@ -266,7 +267,11 @@ describe('ACL (Access Control List)', () => {
 
             const actual = acl.resolveAccess(request)
 
-            expect(actual).toEqual({ type: 'denied', allowEntries: [allowEntry], denyEntry: denyEntry })
+            expect(actual).toEqual({
+              type: 'denied',
+              allowEntries: [allowEntry],
+              denyEntry: denyEntry
+            })
           })
         })
 
@@ -282,7 +287,10 @@ describe('ACL (Access Control List)', () => {
               subject: myGroupSubject1,
               permissions: DENY_PATTERNS.READ
             }
-            const resource: Resource = { name: 'test.txt', entries: [userAllowEntry, groupDenyEntry] }
+            const resource: Resource = {
+              name: 'test.txt',
+              entries: [userAllowEntry, groupDenyEntry]
+            }
             const acl = new AccessControlList(resource)
             const request: AccessRequest = {
               subject: { user: 'my_user', groups: ['my_group_1', 'my_group_2'] },
@@ -291,7 +299,11 @@ describe('ACL (Access Control List)', () => {
 
             const actual = acl.resolveAccess(request)
 
-            expect(actual).toEqual({ type: 'denied', allowEntries: [userAllowEntry], denyEntry: groupDenyEntry })
+            expect(actual).toEqual({
+              type: 'denied',
+              allowEntries: [userAllowEntry],
+              denyEntry: groupDenyEntry
+            })
           })
         })
 
@@ -312,7 +324,10 @@ describe('ACL (Access Control List)', () => {
               subject: myGroupSubject2,
               permissions: DENY_PATTERNS.READ
             }
-            const resource: Resource = { name: 'test.txt', entries: [userAllowEntry, group1AllowEntry, group2DenyEntry] }
+            const resource: Resource = {
+              name: 'test.txt',
+              entries: [userAllowEntry, group1AllowEntry, group2DenyEntry]
+            }
             const acl = new AccessControlList(resource)
             const request: AccessRequest = {
               subject: { user: 'my_user', groups: ['my_group_1', 'my_group_2'] },
@@ -321,7 +336,11 @@ describe('ACL (Access Control List)', () => {
 
             const actual = acl.resolveAccess(request)
 
-            expect(actual).toEqual({ type: 'denied', allowEntries: [userAllowEntry, group1AllowEntry], denyEntry: group2DenyEntry })
+            expect(actual).toEqual({
+              type: 'denied',
+              allowEntries: [userAllowEntry, group1AllowEntry],
+              denyEntry: group2DenyEntry
+            })
           })
         })
 
@@ -342,7 +361,10 @@ describe('ACL (Access Control List)', () => {
               subject: myGroupSubject2,
               permissions: DENY_PATTERNS.READ
             }
-            const resource: Resource = { name: 'test.txt', entries: [userAllowEntry, group1DenyEntry, group2DenyEntry] }
+            const resource: Resource = {
+              name: 'test.txt',
+              entries: [userAllowEntry, group1DenyEntry, group2DenyEntry]
+            }
             const acl = new AccessControlList(resource)
             const request: AccessRequest = {
               subject: { user: 'my_user', groups: ['my_group_1', 'my_group_2'] },
@@ -351,7 +373,11 @@ describe('ACL (Access Control List)', () => {
 
             const actual = acl.resolveAccess(request)
 
-            expect(actual).toEqual({ type: 'denied', allowEntries: [userAllowEntry], denyEntry: group1DenyEntry })
+            expect(actual).toEqual({
+              type: 'denied',
+              allowEntries: [userAllowEntry],
+              denyEntry: group1DenyEntry
+            })
           })
         })
 
@@ -367,7 +393,10 @@ describe('ACL (Access Control List)', () => {
               subject: myGroupSubject1,
               permissions: ALLOW_PATTERNS.READ_ONLY
             }
-            const resource: Resource = { name: 'test.txt', entries: [userDenyEntry, groupAllowEntry] }
+            const resource: Resource = {
+              name: 'test.txt',
+              entries: [userDenyEntry, groupAllowEntry]
+            }
             const acl = new AccessControlList(resource)
             const request: AccessRequest = {
               subject: { user: 'my_user', groups: ['my_group_1', 'my_group_2'] },
@@ -376,7 +405,11 @@ describe('ACL (Access Control List)', () => {
 
             const actual = acl.resolveAccess(request)
 
-            expect(actual).toEqual({ type: 'denied', allowEntries: [groupAllowEntry], denyEntry: userDenyEntry })
+            expect(actual).toEqual({
+              type: 'denied',
+              allowEntries: [groupAllowEntry],
+              denyEntry: userDenyEntry
+            })
           })
         })
 
@@ -397,7 +430,10 @@ describe('ACL (Access Control List)', () => {
               subject: myGroupSubject2,
               permissions: ALLOW_PATTERNS.READ_ONLY
             }
-            const resource: Resource = { name: 'test.txt', entries: [userDenyEntry, group1AllowEntry, group2AllowEntry] }
+            const resource: Resource = {
+              name: 'test.txt',
+              entries: [userDenyEntry, group1AllowEntry, group2AllowEntry]
+            }
             const acl = new AccessControlList(resource)
             const request: AccessRequest = {
               subject: { user: 'my_user', groups: ['my_group_1', 'my_group_2'] },
@@ -406,7 +442,11 @@ describe('ACL (Access Control List)', () => {
 
             const actual = acl.resolveAccess(request)
 
-            expect(actual).toEqual({ type: 'denied', allowEntries: [group1AllowEntry, group2AllowEntry], denyEntry: userDenyEntry })
+            expect(actual).toEqual({
+              type: 'denied',
+              allowEntries: [group1AllowEntry, group2AllowEntry],
+              denyEntry: userDenyEntry
+            })
           })
         })
       })
@@ -424,7 +464,10 @@ describe('ACL (Access Control List)', () => {
               subject: myGroupSubject1,
               permissions: DENY_PATTERNS.READ
             }
-            const resource: Resource = { name: 'test.txt', entries: [userAllowEntry, groupDenyEntry] }
+            const resource: Resource = {
+              name: 'test.txt',
+              entries: [userAllowEntry, groupDenyEntry]
+            }
             const acl = new AccessControlList(resource)
             const request: AccessRequest = {
               subject: { user: 'my_user', groups: [] },

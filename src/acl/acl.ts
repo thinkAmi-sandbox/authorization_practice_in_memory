@@ -47,15 +47,15 @@ export type Resource = {
 export type AccessRequest = {
   subject: {
     user: string // 要求者のユーザー名
-    groups: string[] // 要求者が所属する全グループ
+    groups: ReadonlyArray<string> // 要求者が所属する全グループ
   }
   action: PermissionAction // 'read' | 'write'
 }
 
 // アクセス決定（Tagged Union - Deny優先型）
 export type AccessDecision =
-  | { type: 'granted'; allowEntries: Entry[] } // マッチしたAllowエントリー
-  | { type: 'denied'; denyEntry: Entry; allowEntries: Entry[] } // Denyが優先
+  | { type: 'granted'; allowEntries: ReadonlyArray<Entry> } // マッチしたAllowエントリー
+  | { type: 'denied'; denyEntry: Entry; allowEntries: ReadonlyArray<Entry> } // Denyが優先
   | { type: 'no-match' } // マッチするエントリーなし
 
 // ==========================================
@@ -77,7 +77,9 @@ export class AccessControlList {
         case 'user':
           return entry.subject.name === request.subject.user && entry.permissions[request.action]
         case 'group':
-          return request.subject.groups.includes(entry.subject.name) && entry.permissions[request.action]
+          return (
+            request.subject.groups.includes(entry.subject.name) && entry.permissions[request.action]
+          )
       }
     })
 
@@ -96,28 +98,11 @@ export class AccessControlList {
 
     return { type: 'granted', allowEntries: matchEntries }
   }
-
-  // エントリーを追加
-  addEntry(entry: Entry): void {
-    // 実装は学習者が行う
-    throw new Error('Not implemented')
-  }
-
-  // エントリーを削除
-  removeEntry(subject: Subject): void {
-    // 実装は学習者が行う
-    throw new Error('Not implemented')
-  }
 }
 
 // ==========================================
 // ヘルパー関数
 // ==========================================
-
-// 権限ビットの作成
-export function createPermissionBits(read: boolean, write: boolean): PermissionBits {
-  return { read, write }
-}
 
 // よく使う権限パターン
 // 許可用パターン（Allowエントリーで使用）
