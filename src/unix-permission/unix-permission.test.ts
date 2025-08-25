@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'bun:test'
+import { describe, expect, it } from 'bun:test'
+import type { Mode, UnixResource } from './unix-permission'
 import { UnixPermission } from './unix-permission'
-import type { UnixResource, Mode } from './unix-permission'
 
 describe('UnixPermission', () => {
   describe('hasPermission', () => {
