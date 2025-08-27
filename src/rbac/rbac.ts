@@ -123,16 +123,19 @@ export class RbacProtectedResource {
 
   // アクセス権限をチェック（業界標準の「authorize」）
   authorize(userName: UserName, action: PermissionAction): AuthzDecision {
-    if (!this.roleManager || !this.requirements) {
+    // プロパティからローカル変数へ取り出してガードすることで、型をナローイングする
+    const roleManager = this.roleManager
+    const requirements = this.requirements
+    if (!roleManager || !requirements) {
       return {type: 'denied', reason: 'no-roles'}
     }
 
-    const userRoles = this.roleManager.getUserRoles(userName);
-    const matchedRoles = this.requirements.roles.filter((roleName) => {
-      return userRoles.has(roleName) && this.roleManager.getRole(roleName).permissions[action];
+    const userRoles = roleManager.getUserRoles(userName);
+    const matchedRoles = requirements.roles.filter((roleName) => {
+      return userRoles.has(roleName) && roleManager.getRole(roleName).permissions[action];
     })
 
-    switch (this.requirements.type) {
+    switch (requirements.type) {
       case 'any':
         if (matchedRoles.length > 0) {
           return {type: 'granted', matchedRoles}
@@ -140,7 +143,7 @@ export class RbacProtectedResource {
         return {type: 'denied', reason: 'insufficient-permissions', userRoles: Array.from(userRoles)}
 
       case 'all':
-        const allMatch = this.requirements.roles.every(roleName => matchedRoles.includes(roleName))
+        const allMatch = requirements.roles.every(roleName => matchedRoles.includes(roleName))
 
         if (allMatch) {
           return {type: 'granted', matchedRoles}
