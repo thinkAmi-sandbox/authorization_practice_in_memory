@@ -105,7 +105,7 @@ export class RoleManager {
   }
 }
 
-// リソースに対するアクセス権限をRBACで管理するクラス
+// リソースに対する権限をRBACで管理するクラス
 export class RbacProtectedResource {
   private resourceId: string
   private readonly roleManager?: RoleManager
@@ -121,7 +121,7 @@ export class RbacProtectedResource {
     this.requirements = requirements
   }
 
-  // アクセス権限をチェック
+  // 権限をチェック
   authorize(userName: UserName, action: PermissionAction): AuthzDecision {
     // プロパティからローカル変数へ取り出してガードすることで、型をナローイングする
     const roleManager = this.roleManager
