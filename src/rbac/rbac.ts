@@ -78,7 +78,7 @@ export type AuthzDecision =
 // クラス定義
 // ==========================================
 
-// ロール管理クラス（グローバルロール管理）
+// ユーザーに対するロールを管理するクラス
 export class RoleManager {
   private readonly roles: typeof ROLES
   private userRoleAssignments: UserRoleAssignment
@@ -105,7 +105,7 @@ export class RoleManager {
   }
 }
 
-// RBACで保護されたリソースクラス
+// リソースに対するアクセス権限をRBACで管理するクラス
 export class RbacProtectedResource {
   private resourceId: string
   private readonly roleManager?: RoleManager
@@ -121,7 +121,7 @@ export class RbacProtectedResource {
     this.requirements = requirements
   }
 
-  // アクセス権限をチェック（業界標準の「authorize」）
+  // アクセス権限をチェック
   authorize(userName: UserName, action: PermissionAction): AuthzDecision {
     // プロパティからローカル変数へ取り出してガードすることで、型をナローイングする
     const roleManager = this.roleManager
