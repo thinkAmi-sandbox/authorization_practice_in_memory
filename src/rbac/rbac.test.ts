@@ -1,0 +1,276 @@
+import {describe, expect, it} from "bun:test";
+import {RbacProtectedResource, RoleManager, ROLES} from "./rbac";
+
+describe('RBAC (Role-Based Access Control)', () => {
+  describe('authorize', () => {
+    describe('読み込み権限', () => {
+      it.skip('読み込み権限はどのロールでも保有しているため、今回はテストを省略する', () => {
+      })
+    })
+
+    describe('書き込み権限', () => {
+      describe('リソースにロールが割り当てられていない', () => {
+        describe('ユーザーにロールが割り当てられていない', () => {
+          it('リソースにロールがないため、拒否されること', () => {
+            const resource = new RbacProtectedResource('doc1');
+
+            const result = resource.authorize('user1', 'write');
+
+            expect(result).toEqual({
+              type: 'denied',
+              reason: 'no-roles'
+            });
+          })
+        })
+
+        describe('ユーザーにロールが割り当てられている', () => {
+          it('リソースにロールがないため、拒否されること', () => {
+            const roleManager = new RoleManager(ROLES);
+            roleManager.assignRole('user1', 'editor');
+            const resource = new RbacProtectedResource('doc1');
+
+            const result = resource.authorize('user1', 'write');
+
+            expect(result).toEqual({
+              type: 'denied',
+              reason: 'no-roles'
+            });
+          })
+        })
+      })
+
+      describe('リソースに書き込み権限のないロールが割り当てられている', () => {
+        const roles = ['viewer' as const, 'auditor' as const];
+
+        describe('リソースではいずれかのロールにマッチする必要がある', () => {
+          const requirementType = 'any' as const;
+
+          describe('ユーザーはリソースが求めるロールを持っていない', () => {
+            const roleManager = new RoleManager(ROLES);
+            const requirements = {type: requirementType, roles: roles};
+            const resource = new RbacProtectedResource('doc1', roleManager, requirements);
+
+            it('ユーザーのロールがないため、拒否されること', () => {
+              const result = resource.authorize('user1', 'write');
+
+              expect(result).toEqual({
+                type: 'denied',
+                reason: 'insufficient-permissions',
+                userRoles: []
+              });
+            })
+          })
+
+          describe('ユーザーはリソースが求めるロールを1つ持っている', () => {
+            const roleManager = new RoleManager(ROLES);
+            const requirements = {type: requirementType, roles};
+            const resource = new RbacProtectedResource('doc1', roleManager, requirements);
+
+            roleManager.assignRole('user1', 'viewer');
+
+            it('ロールの権限不足のため、拒否されること', () => {
+              const result = resource.authorize('user1', 'write');
+
+              expect(result).toEqual({
+                type: 'denied',
+                reason: 'insufficient-permissions',
+                userRoles: ['viewer']
+              });
+            })
+          })
+
+          describe('ユーザーはリソースが求めるロールを複数持っている', () => {
+            const roleManager = new RoleManager(ROLES);
+            const requirements = {type: requirementType, roles: roles};
+            const resource = new RbacProtectedResource('doc1', roleManager, requirements);
+
+            roleManager.assignRole('user1', 'viewer');
+            roleManager.assignRole('user1', 'auditor');
+
+            it('ロールの権限不足のため、拒否されること', () => {
+              const result = resource.authorize('user1', 'write');
+
+              expect(result).toEqual({
+                type: 'denied',
+                reason: 'insufficient-permissions',
+                userRoles: ['viewer', 'auditor']
+              });
+            })
+          })
+        })
+
+        describe('リソースではすべてのロールにマッチする必要がある', () => {
+          const requirementType = 'all' as const;
+
+          describe('ユーザーはリソースが求めるロールを持っていない', () => {
+            const roleManager = new RoleManager(ROLES);
+            const requirements = {type: requirementType, roles};
+            const resource = new RbacProtectedResource('doc1', roleManager, requirements);
+
+            it('ユーザーにすべてのロールがないため、拒否されること', () => {
+              const result = resource.authorize('user1', 'write');
+
+              expect(result).toEqual({
+                type: 'denied',
+                reason: 'requirement-not-met',
+                userRoles: [],
+              });
+            })
+          })
+
+          describe('ユーザーはリソースが求めるロールを1つ持っている', () => {
+            const roleManager = new RoleManager(ROLES);
+            const requirements = {type: requirementType, roles};
+            const resource = new RbacProtectedResource('doc1', roleManager, requirements);
+
+            roleManager.assignRole('user1', 'viewer');
+
+            it('ユーザーにすべてのロールがないため、拒否されること', () => {
+              const result = resource.authorize('user1', 'write');
+
+              expect(result).toEqual({
+                type: 'denied',
+                reason: 'requirement-not-met',
+                userRoles: ['viewer'],
+              });
+            })
+          })
+
+          describe('ユーザーはリソースが求めるロールをすべて持っている', () => {
+            const roleManager = new RoleManager(ROLES);
+            const requirements = {type: requirementType, roles};
+            const resource = new RbacProtectedResource('doc1', roleManager, requirements);
+
+            roleManager.assignRole('user1', 'viewer');
+            roleManager.assignRole('user1', 'auditor');
+
+            it('ユーザーにすべてのロールがないため、拒否されること', () => {
+              const result = resource.authorize('user1', 'write');
+
+              expect(result).toEqual({
+                type: 'denied',
+                reason: 'requirement-not-met',
+                userRoles: ['viewer', 'auditor'],
+              });
+            })
+          })
+        })
+      })
+
+      describe('リソースに書き込み権限があるロールが割り当てられている', () => {
+        const roles = ['editor' as const, 'admin' as const];
+
+        describe('リソースではいずれかのロールにマッチする必要がある', () => {
+          const requirementType = 'any' as const;
+
+          describe('ユーザーはリソースが求めるロールを持っていない', () => {
+            const roleManager = new RoleManager(ROLES);
+            const requirements = {type: requirementType, roles: roles};
+            const resource = new RbacProtectedResource('doc1', roleManager, requirements);
+
+            it('ユーザーのロールがないため、拒否されること', () => {
+              const result = resource.authorize('user1', 'write');
+
+              expect(result).toEqual({
+                type: 'denied',
+                reason: 'insufficient-permissions',
+                userRoles: []
+              });
+            })
+          })
+
+          describe('ユーザーはリソースが求めるロールを1つ持っている', () => {
+            const roleManager = new RoleManager(ROLES);
+            const requirements = {type: requirementType, roles: roles};
+            const resource = new RbacProtectedResource('doc1', roleManager, requirements);
+
+            roleManager.assignRole('user1', 'editor');
+
+            it('許可されること', () => {
+              const result = resource.authorize('user1', 'write');
+
+              expect(result).toEqual({
+                type: 'granted',
+                matchedRoles: ['editor'],
+              });
+            })
+          })
+
+          describe('ユーザーはリソースが求めるロールを複数持っている', () => {
+            it('許可されること', () => {
+              const roleManager = new RoleManager(ROLES);
+              roleManager.assignRole('user1', 'editor');
+              roleManager.assignRole('user1', 'admin');
+              const requirements = {type: 'any' as const, roles: ['editor' as const, 'admin' as const]};
+              const resource = new RbacProtectedResource('doc1', roleManager, requirements);
+
+              const result = resource.authorize('user1', 'write');
+
+              expect(result).toEqual({
+                type: 'granted',
+                matchedRoles: ['editor', 'admin'],
+              });
+            })
+          })
+        })
+
+        describe('リソースではすべてのロールにマッチする必要がある', () => {
+          const requirementType = 'all' as const;
+
+          describe('ユーザーはリソースが求めるロールを持っていない', () => {
+            const roleManager = new RoleManager(ROLES);
+            const requirements = {type: requirementType, roles};
+            const resource = new RbacProtectedResource('doc1', roleManager, requirements);
+
+            it('ユーザーにすべてのロールがないため、拒否されること', () => {
+              const result = resource.authorize('user1', 'write');
+
+              expect(result).toEqual({
+                type: 'denied',
+                reason: 'requirement-not-met',
+                userRoles: [],
+              });
+            })
+          })
+
+          describe('ユーザーはリソースが求めるロールを1つ持っている', () => {
+            const roleManager = new RoleManager(ROLES);
+            const requirements = {type: requirementType, roles};
+            const resource = new RbacProtectedResource('doc1', roleManager, requirements);
+
+            roleManager.assignRole('user1', 'editor');
+
+            it('ユーザーにすべてのロールがないため、拒否されること', () => {
+              const result = resource.authorize('user1', 'write');
+
+              expect(result).toEqual({
+                type: 'denied',
+                reason: 'requirement-not-met',
+                userRoles: ['editor'],
+              });
+            })
+          })
+
+          describe('ユーザーはリソースが求めるロールをすべて持っている', () => {
+            const roleManager = new RoleManager(ROLES);
+            const requirements = {type: requirementType, roles};
+            const resource = new RbacProtectedResource('doc1', roleManager, requirements);
+
+            roleManager.assignRole('user1', 'editor');
+            roleManager.assignRole('user1', 'admin');
+
+            it('許可されること', () => {
+
+              const result = resource.authorize('user1', 'write');
+
+              expect(result).toEqual({
+                type: 'granted',
+                matchedRoles: ['editor', 'admin'],
+              });
+            })
+          })
+        })
+      })
+    })
+  })
+})
