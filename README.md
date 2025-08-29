@@ -13,3 +13,4 @@
 
 - [権限管理の1つであるUnixパーミッションをTypeScriptで実装してみた - メモ的な思考的な](https://thinkami.hatenablog.com/entry/2025/08/24/211635)
 - [権限管理の1つであるACL (Access Control List) をTypeScriptで実装してみた - メモ的な思考的な](https://thinkami.hatenablog.com/entry/2025/08/25/212900)
+- [権限管理の1つであるRBAC (Role-Based Access Control) をTypeScriptで実装してみた - メモ的な思考的な](https://thinkami.hatenablog.com/entry/2025/08/29/221436)
