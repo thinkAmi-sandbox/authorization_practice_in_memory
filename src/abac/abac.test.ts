@@ -1,17 +1,5 @@
 import {describe, expect, it} from "bun:test";
-import {
-  PolicyEvaluationEngine,
-  PolicyRule,
-  EvaluationContext,
-  PolicyDecision,
-  PermissionAction,
-  Department,
-  SecurityLevel,
-  Location,
-  SubjectAttributes,
-  ResourceAttributes,
-  EnvironmentAttributes
-} from "./abac";
+import {EvaluationContext, Rule, RuleEvaluationEngine} from "./abac";
 
 // テストヘルパー関数
 function createDefaultContext(): EvaluationContext {
@@ -34,7 +22,7 @@ function createDefaultContext(): EvaluationContext {
   };
 }
 
-function createPermitPolicy(id: string, condition?: (ctx: EvaluationContext) => boolean): PolicyRule {
+function createPermitRule(id: string, condition?: (ctx: EvaluationContext) => boolean): Rule {
   return {
     id,
     effect: 'permit',
@@ -42,7 +30,7 @@ function createPermitPolicy(id: string, condition?: (ctx: EvaluationContext) => 
   };
 }
 
-function createDenyPolicy(id: string, condition?: (ctx: EvaluationContext) => boolean): PolicyRule {
+function createDenyRule(id: string, condition?: (ctx: EvaluationContext) => boolean): Rule {
   return {
     id,
     effect: 'deny',
@@ -51,98 +39,98 @@ function createDenyPolicy(id: string, condition?: (ctx: EvaluationContext) => bo
 }
 
 describe('ABAC (Attribute-Based Access Control)', () => {
-  describe('ポリシーが存在しない', () => {
-    it('not-applicableと評価され、reasonに「ポリシーが1つも登録されていない」が設定されていること', () => {
-      const engine = new PolicyEvaluationEngine();
+  describe('ルールが存在しない', () => {
+    it('not-applicableと評価され、reasonに「ルールが1つも登録されていない」が設定されていること', () => {
+      const engine = new RuleEvaluationEngine();
       const context = createDefaultContext();
 
       const result = engine.evaluate(context);
 
       expect(result).toEqual({
         type: 'not-applicable',
-        reason: 'ポリシーが1つも登録されていない'
+        reason: 'ルールが1つも登録されていない'
       });
     })
   })
 
-  describe('単一ポリシー', () => {
+  describe('単一ルール', () => {
     describe('単純な条件評価', () => {
-      describe('Permitポリシーの条件を満たす', () => {
-        it('Permitと評価され、appliedRuleにPermitポリシーが設定されること', () => {
-          const engine = new PolicyEvaluationEngine();
-          const policy = createPermitPolicy('permit-1', () => true);
-          engine.addPolicy(policy);
+      describe('Permitルールの条件を満たす', () => {
+        it('Permitと評価され、appliedRuleにPermitルールが設定されること', () => {
+          const engine = new RuleEvaluationEngine();
+          const rule = createPermitRule('permit-1', () => true);
+          engine.addRule(rule);
           const context = createDefaultContext();
 
           const result = engine.evaluate(context);
 
           expect(result).toEqual({
             type: 'permit',
-            appliedRule: policy,
+            appliedRule: rule,
             context: context
           });
         })
       })
 
-      describe('Permitポリシーの条件を満たさない', () => {
-        it('not-applicableと評価され、reasonに「Permitポリシーを含む構成で、どの条件にもマッチしない」が設定され、contextにも値が設定されていること', () => {
-          const engine = new PolicyEvaluationEngine();
-          const policy = createPermitPolicy('permit-1', () => false);
-          engine.addPolicy(policy);
+      describe('Permitルールの条件を満たさない', () => {
+        it('not-applicableと評価され、reasonに「Permitルールを含む構成で、どの条件にもマッチしない」が設定され、contextにも値が設定されていること', () => {
+          const engine = new RuleEvaluationEngine();
+          const rule = createPermitRule('permit-1', () => false);
+          engine.addRule(rule);
           const context = createDefaultContext();
 
           const result = engine.evaluate(context);
 
           expect(result).toEqual({
             type: 'not-applicable',
-            reason: 'Permitポリシーを含む構成で、どの条件にもマッチしない'
+            reason: 'Permitルールを含む構成で、どの条件にもマッチしない'
           });
         })
       })
 
-      describe('Denyポリシーの条件を満たす', () => {
-        it('Denyと評価され、appliedRuleにDenyポリシーが設定されること', () => {
-          const engine = new PolicyEvaluationEngine();
-          const policy = createDenyPolicy('deny-1', () => true);
-          engine.addPolicy(policy);
+      describe('Denyルールの条件を満たす', () => {
+        it('Denyと評価され、appliedRuleにDenyルールが設定されること', () => {
+          const engine = new RuleEvaluationEngine();
+          const rule = createDenyRule('deny-1', () => true);
+          engine.addRule(rule);
           const context = createDefaultContext();
 
           const result = engine.evaluate(context);
 
           expect(result).toEqual({
             type: 'deny',
-            appliedRule: policy,
+            appliedRule: rule,
             context: context
           });
         })
       })
 
-      describe('Denyポリシーの条件を満たさない', () => {
-        it('not-applicableと評価され、reasonに「Denyポリシーのみ存在し、条件にマッチしない」が設定され、contextにも値が設定されていること', () => {
-          const engine = new PolicyEvaluationEngine();
-          const policy = createDenyPolicy('deny-1', () => false);
-          engine.addPolicy(policy);
+      describe('Denyルールの条件を満たさない', () => {
+        it('not-applicableと評価され、reasonに「Denyルールのみ存在し、条件にマッチしない」が設定され、contextにも値が設定されていること', () => {
+          const engine = new RuleEvaluationEngine();
+          const rule = createDenyRule('deny-1', () => false);
+          engine.addRule(rule);
           const context = createDefaultContext();
 
           const result = engine.evaluate(context);
 
           expect(result).toEqual({
             type: 'not-applicable',
-            reason: 'Denyポリシーのみ存在し、条件にマッチしない'
+            reason: 'Denyルールのみ存在し、条件にマッチしない'
           });
         })
       })
     })
 
     describe('属性を使った評価', () => {
-      describe('単一カテゴリーのポリシー', () => {
+      describe('単一カテゴリーのルール', () => {
         describe('Subject属性のみ(文字列の確認)', () => {
           describe('departmentで特定の部門を許可', () => {
-            const engine = new PolicyEvaluationEngine();
-            const policy = createPermitPolicy('subject-dept-1', (ctx) =>
+            const engine = new RuleEvaluationEngine();
+            const rule = createPermitRule('subject-dept-1', (ctx) =>
               ctx.subject.department === 'engineering'
             );
-            engine.addPolicy(policy);
+            engine.addRule(rule);
 
             describe('許可された部門のユーザー', () => {
               const context = createDefaultContext();
@@ -153,7 +141,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                 expect(result).toEqual({
                   type: 'permit',
-                  appliedRule: policy,
+                  appliedRule: rule,
                   context: context
                 });
               })
@@ -168,7 +156,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                 expect(result).toEqual({
                   type: 'not-applicable',
-                  reason: 'Permitポリシーを含む構成で、どの条件にもマッチしない'
+                  reason: 'Permitルールを含む構成で、どの条件にもマッチしない'
                 });
               })
             })
@@ -177,11 +165,11 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
         describe('Resource属性のみ(数値の確認)', () => {
           describe('classificationLevelが3', () => {
-            const engine = new PolicyEvaluationEngine();
-            const policy = createPermitPolicy('resource-level-1', (ctx) =>
+            const engine = new RuleEvaluationEngine();
+            const rule = createPermitRule('resource-level-1', (ctx) =>
               ctx.resource.classificationLevel === 3
             );
-            engine.addPolicy(policy);
+            engine.addRule(rule);
 
             describe('ドキュメントのclassificationLevelが2', () => {
               const context = createDefaultContext();
@@ -192,7 +180,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                 expect(result).toEqual({
                   type: 'not-applicable',
-                  reason: 'Permitポリシーを含む構成で、どの条件にもマッチしない'
+                  reason: 'Permitルールを含む構成で、どの条件にもマッチしない'
                 });
               })
             })
@@ -206,7 +194,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                 expect(result).toEqual({
                   type: 'permit',
-                  appliedRule: policy,
+                  appliedRule: rule,
                   context: context
                 });
               })
@@ -216,15 +204,15 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
         describe('Environment属性のみ(日時の確認)', () => {
           describe('営業時間内(09:00:00-17:00:00)のみアクセスを許可', () => {
-            const engine = new PolicyEvaluationEngine();
-            const policy = createPermitPolicy('business-hours-1', (ctx) => {
+            const engine = new RuleEvaluationEngine();
+            const rule = createPermitRule('business-hours-1', (ctx) => {
               const currentTime = ctx.environment.currentTime;
               const currentSeconds = currentTime.getHours() * 3600 + currentTime.getMinutes() * 60 + currentTime.getSeconds();
               const startSeconds = 9 * 3600;   // 09:00:00
               const endSeconds = 17 * 3600;    // 17:00:00
               return startSeconds <= currentSeconds && currentSeconds <= endSeconds;
             });
-            engine.addPolicy(policy);
+            engine.addRule(rule);
 
             describe('アクセス時間が08:59:59', () => {
               const context = createDefaultContext();
@@ -235,7 +223,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                 expect(result).toEqual({
                   type: 'not-applicable',
-                  reason: 'Permitポリシーを含む構成で、どの条件にもマッチしない'
+                  reason: 'Permitルールを含む構成で、どの条件にもマッチしない'
                 });
               })
             })
@@ -249,7 +237,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                 expect(result).toEqual({
                   type: 'permit',
-                  appliedRule: policy,
+                  appliedRule: rule,
                   context: context
                 });
               })
@@ -264,7 +252,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                 expect(result).toEqual({
                   type: 'permit',
-                  appliedRule: policy,
+                  appliedRule: rule,
                   context: context
                 });
               })
@@ -279,7 +267,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                 expect(result).toEqual({
                   type: 'not-applicable',
-                  reason: 'Permitポリシーを含む構成で、どの条件にもマッチしない'
+                  reason: 'Permitルールを含む構成で、どの条件にもマッチしない'
                 });
               })
             })
@@ -287,15 +275,15 @@ describe('ABAC (Attribute-Based Access Control)', () => {
         })
       })
 
-      describe('複数カテゴリーを組み合わせたポリシー', () => {
+      describe('複数カテゴリーを組み合わせたルール', () => {
         describe('SubjectとResourceの組み合わせ', () => {
-          describe('同一部門かつ、SubjectのclearanceLevelがResourceのclassificationLevel以上で許可と定義したポリシー', () => {
-            const engine = new PolicyEvaluationEngine();
-            const policy = createPermitPolicy('dept-clearance-1', (ctx) =>
+          describe('同一部門かつ、SubjectのclearanceLevelがResourceのclassificationLevel以上で許可と定義したルール', () => {
+            const engine = new RuleEvaluationEngine();
+            const rule = createPermitRule('dept-clearance-1', (ctx) =>
               ctx.subject.department === ctx.resource.department &&
               ctx.subject.clearanceLevel >= ctx.resource.classificationLevel
             );
-            engine.addPolicy(policy);
+            engine.addRule(rule);
 
             describe('同一部門', () => {
               describe('SubjectのclearanceLevelがResourceのclassificationLevelよりも上', () => {
@@ -310,7 +298,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                   expect(result).toEqual({
                     type: 'permit',
-                    appliedRule: policy,
+                    appliedRule: rule,
                     context: context
                   });
                 })
@@ -328,7 +316,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                   expect(result).toEqual({
                     type: 'permit',
-                    appliedRule: policy,
+                    appliedRule: rule,
                     context: context
                   });
                 })
@@ -346,7 +334,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                   expect(result).toEqual({
                     type: 'not-applicable',
-                    reason: 'Permitポリシーを含む構成で、どの条件にもマッチしない'
+                    reason: 'Permitルールを含む構成で、どの条件にもマッチしない'
                   });
                 })
               })
@@ -365,7 +353,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                   expect(result).toEqual({
                     type: 'not-applicable',
-                    reason: 'Permitポリシーを含む構成で、どの条件にもマッチしない'
+                    reason: 'Permitルールを含む構成で、どの条件にもマッチしない'
                   });
                 })
               })
@@ -382,7 +370,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                   expect(result).toEqual({
                     type: 'not-applicable',
-                    reason: 'Permitポリシーを含む構成で、どの条件にもマッチしない'
+                    reason: 'Permitルールを含む構成で、どの条件にもマッチしない'
                   });
                 })
               })
@@ -399,7 +387,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                   expect(result).toEqual({
                     type: 'not-applicable',
-                    reason: 'Permitポリシーを含む構成で、どの条件にもマッチしない'
+                    reason: 'Permitルールを含む構成で、どの条件にもマッチしない'
                   });
                 })
               })
@@ -408,9 +396,9 @@ describe('ABAC (Attribute-Based Access Control)', () => {
         })
 
         describe('SubjectとResourceとEnvironmentの組み合わせ', () => {
-          describe('「同一部門」、もしくは、「locationがofficeでアクセスした人がclearanceLevelが5、actionがread」の場合は許可と定義したポリシー', () => {
-            const engine = new PolicyEvaluationEngine();
-            const policy = createPermitPolicy('complex-policy-1', (ctx) => 
+          describe('「同一部門」、もしくは、「locationがofficeでアクセスした人がclearanceLevelが5、actionがread」の場合は許可と定義したルール', () => {
+            const engine = new RuleEvaluationEngine();
+            const rule = createPermitRule('complex-rule-1', (ctx) => 
               // 同一部門の場合は許可
               (ctx.subject.department === ctx.resource.department) ||
               // もしくは、オフィスからのアクセスで、クリアランスレベル5、読み取り操作の場合は許可
@@ -418,7 +406,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
                ctx.subject.clearanceLevel === 5 && 
                ctx.action === 'read')
             );
-            engine.addPolicy(policy);
+            engine.addRule(rule);
 
             describe('同一部門', () => {
               describe('locationがoffice', () => {
@@ -436,7 +424,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                       expect(result).toEqual({
                         type: 'permit',
-                        appliedRule: policy,
+                        appliedRule: rule,
                         context: context
                       });
                     })
@@ -455,7 +443,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                       expect(result).toEqual({
                         type: 'permit',
-                        appliedRule: policy,
+                        appliedRule: rule,
                         context: context
                       });
                     })
@@ -476,7 +464,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                       expect(result).toEqual({
                         type: 'permit',
-                        appliedRule: policy,
+                        appliedRule: rule,
                         context: context
                       });
                     })
@@ -495,7 +483,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                       expect(result).toEqual({
                         type: 'permit',
-                        appliedRule: policy,
+                        appliedRule: rule,
                         context: context
                       });
                     })
@@ -518,7 +506,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                       expect(result).toEqual({
                         type: 'permit',
-                        appliedRule: policy,
+                        appliedRule: rule,
                         context: context
                       });
                     })
@@ -537,7 +525,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                       expect(result).toEqual({
                         type: 'permit',
-                        appliedRule: policy,
+                        appliedRule: rule,
                         context: context
                       });
                     })
@@ -558,7 +546,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                       expect(result).toEqual({
                         type: 'permit',
-                        appliedRule: policy,
+                        appliedRule: rule,
                         context: context
                       });
                     })
@@ -577,7 +565,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                       expect(result).toEqual({
                         type: 'permit',
-                        appliedRule: policy,
+                        appliedRule: rule,
                         context: context
                       });
                     })
@@ -602,7 +590,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                       expect(result).toEqual({
                         type: 'not-applicable',
-                        reason: 'Permitポリシーを含む構成で、どの条件にもマッチしない'
+                        reason: 'Permitルールを含む構成で、どの条件にもマッチしない'
                       });
                     })
                   })
@@ -620,7 +608,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                       expect(result).toEqual({
                         type: 'not-applicable',
-                        reason: 'Permitポリシーを含む構成で、どの条件にもマッチしない'
+                        reason: 'Permitルールを含む構成で、どの条件にもマッチしない'
                       });
                     })
                   })
@@ -640,7 +628,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                       expect(result).toEqual({
                         type: 'permit',
-                        appliedRule: policy,
+                        appliedRule: rule,
                         context: context
                       });
                     })
@@ -659,7 +647,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                       expect(result).toEqual({
                         type: 'not-applicable',
-                        reason: 'Permitポリシーを含む構成で、どの条件にもマッチしない'
+                        reason: 'Permitルールを含む構成で、どの条件にもマッチしない'
                       });
                     })
                   })
@@ -681,7 +669,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                       expect(result).toEqual({
                         type: 'not-applicable',
-                        reason: 'Permitポリシーを含む構成で、どの条件にもマッチしない'
+                        reason: 'Permitルールを含む構成で、どの条件にもマッチしない'
                       });
                     })
                   })
@@ -699,7 +687,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                       expect(result).toEqual({
                         type: 'not-applicable',
-                        reason: 'Permitポリシーを含む構成で、どの条件にもマッチしない'
+                        reason: 'Permitルールを含む構成で、どの条件にもマッチしない'
                       });
                     })
                   })
@@ -719,7 +707,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                       expect(result).toEqual({
                         type: 'not-applicable',
-                        reason: 'Permitポリシーを含む構成で、どの条件にもマッチしない'
+                        reason: 'Permitルールを含む構成で、どの条件にもマッチしない'
                       });
                     })
                   })
@@ -737,7 +725,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
                       expect(result).toEqual({
                         type: 'not-applicable',
-                        reason: 'Permitポリシーを含む構成で、どの条件にもマッチしない'
+                        reason: 'Permitルールを含む構成で、どの条件にもマッチしない'
                       });
                     })
                   })
@@ -750,97 +738,97 @@ describe('ABAC (Attribute-Based Access Control)', () => {
     })
   })
 
-  describe('複数ポリシー', () => {
+  describe('複数ルール', () => {
     describe('同一の評価', () => {
       describe('すべての評価がPermit', () => {
-        const engine = new PolicyEvaluationEngine();
-        const policy1 = createPermitPolicy('permit-1', () => true);
-        const policy2 = createPermitPolicy('permit-2', () => true);
-        engine.addPolicy(policy1);
-        engine.addPolicy(policy2);
+        const engine = new RuleEvaluationEngine();
+        const rule1 = createPermitRule('permit-1', () => true);
+        const rule2 = createPermitRule('permit-2', () => true);
+        engine.addRule(rule1);
+        engine.addRule(rule2);
         const context = createDefaultContext();
 
-        it('Permitと評価され、appliedRuleには最初のPermitポリシーが設定されること', () => {
+        it('Permitと評価され、appliedRuleには最初のPermitルールが設定されること', () => {
           const result = engine.evaluate(context);
 
           expect(result).toEqual({
             type: 'permit',
-            appliedRule: policy1,
+            appliedRule: rule1,
             context: context
           });
         })
       })
 
       describe('すべての評価がDeny', () => {
-        const engine = new PolicyEvaluationEngine();
-        const policy1 = createDenyPolicy('deny-1', () => true);
-        const policy2 = createDenyPolicy('deny-2', () => true);
-        engine.addPolicy(policy1);
-        engine.addPolicy(policy2);
+        const engine = new RuleEvaluationEngine();
+        const rule1 = createDenyRule('deny-1', () => true);
+        const rule2 = createDenyRule('deny-2', () => true);
+        engine.addRule(rule1);
+        engine.addRule(rule2);
         const context = createDefaultContext();
 
-        it('Denyと評価され、appliedRuleには最初のDenyポリシーが設定されること', () => {
+        it('Denyと評価され、appliedRuleには最初のDenyルールが設定されること', () => {
           const result = engine.evaluate(context);
 
           expect(result).toEqual({
             type: 'deny',
-            appliedRule: policy1,
+            appliedRule: rule1,
             context: context
           });
         })
       })
 
       describe('すべての評価がnot-applicable', () => {
-        describe('ポリシーがすべてPermit', () => {
-          const engine = new PolicyEvaluationEngine();
-          const policy1 = createPermitPolicy('permit-1', () => false);
-          const policy2 = createPermitPolicy('permit-2', () => false);
-          engine.addPolicy(policy1);
-          engine.addPolicy(policy2);
+        describe('ルールがすべてPermit', () => {
+          const engine = new RuleEvaluationEngine();
+          const rule1 = createPermitRule('permit-1', () => false);
+          const rule2 = createPermitRule('permit-2', () => false);
+          engine.addRule(rule1);
+          engine.addRule(rule2);
           const context = createDefaultContext();
 
-          it('not-applicableと評価され、reasonに「Permitポリシーを含む構成で、どの条件にもマッチしない」が設定されていること', () => {
+          it('not-applicableと評価され、reasonに「Permitルールを含む構成で、どの条件にもマッチしない」が設定されていること', () => {
             const result = engine.evaluate(context);
 
             expect(result).toEqual({
               type: 'not-applicable',
-              reason: 'Permitポリシーを含む構成で、どの条件にもマッチしない'
+              reason: 'Permitルールを含む構成で、どの条件にもマッチしない'
             });
           })
         })
 
-        describe('ポリシーがすべてDeny', () => {
-          const engine = new PolicyEvaluationEngine();
-          const policy1 = createDenyPolicy('deny-1', () => false);
-          const policy2 = createDenyPolicy('deny-2', () => false);
-          engine.addPolicy(policy1);
-          engine.addPolicy(policy2);
+        describe('ルールがすべてDeny', () => {
+          const engine = new RuleEvaluationEngine();
+          const rule1 = createDenyRule('deny-1', () => false);
+          const rule2 = createDenyRule('deny-2', () => false);
+          engine.addRule(rule1);
+          engine.addRule(rule2);
           const context = createDefaultContext();
 
-          it('not-applicableと評価され、reasonに「Denyポリシーのみ存在し、条件にマッチしない」が設定されていること', () => {
+          it('not-applicableと評価され、reasonに「Denyルールのみ存在し、条件にマッチしない」が設定されていること', () => {
             const result = engine.evaluate(context);
 
             expect(result).toEqual({
               type: 'not-applicable',
-              reason: 'Denyポリシーのみ存在し、条件にマッチしない'
+              reason: 'Denyルールのみ存在し、条件にマッチしない'
             });
           })
         })
 
-        describe('ポリシーがPermitとDenyの混在', () => {
-          const engine = new PolicyEvaluationEngine();
-          const policy1 = createPermitPolicy('permit-1', () => false);
-          const policy2 = createDenyPolicy('deny-1', () => false);
-          engine.addPolicy(policy1);
-          engine.addPolicy(policy2);
+        describe('ルールがPermitとDenyの混在', () => {
+          const engine = new RuleEvaluationEngine();
+          const rule1 = createPermitRule('permit-1', () => false);
+          const rule2 = createDenyRule('deny-1', () => false);
+          engine.addRule(rule1);
+          engine.addRule(rule2);
           const context = createDefaultContext();
 
-          it('not-applicableと評価され、reasonに「Permitポリシーを含む構成で、どの条件にもマッチしない」が設定されていること', () => {
+          it('not-applicableと評価され、reasonに「Permitルールを含む構成で、どの条件にもマッチしない」が設定されていること', () => {
             const result = engine.evaluate(context);
 
             expect(result).toEqual({
               type: 'not-applicable',
-              reason: 'Permitポリシーを含む構成で、どの条件にもマッチしない'
+              reason: 'Permitルールを含む構成で、どの条件にもマッチしない'
             });
           })
         })
@@ -849,120 +837,120 @@ describe('ABAC (Attribute-Based Access Control)', () => {
 
     describe('評価の競合（Deny-Override）', () => {
       describe('評価がPermitとDenyで競合', () => {
-        const engine = new PolicyEvaluationEngine();
-        const permitPolicy = createPermitPolicy('permit-1', () => true);
-        const denyPolicy = createDenyPolicy('deny-1', () => true);
-        engine.addPolicy(permitPolicy);
-        engine.addPolicy(denyPolicy);
+        const engine = new RuleEvaluationEngine();
+        const permitRule = createPermitRule('permit-1', () => true);
+        const denyRule = createDenyRule('deny-1', () => true);
+        engine.addRule(permitRule);
+        engine.addRule(denyRule);
         const context = createDefaultContext();
 
-        it('Denyと評価され、appliedRuleにはDenyポリシーが設定されること', () => {
+        it('Denyと評価され、appliedRuleにはDenyルールが設定されること', () => {
           const result = engine.evaluate(context);
 
           expect(result).toEqual({
             type: 'deny',
-            appliedRule: denyPolicy,
+            appliedRule: denyRule,
             context: context
           });
         })
       })
 
       describe('評価がPermitとnot-applicableで競合', () => {
-        const engine = new PolicyEvaluationEngine();
-        const permitPolicy = createPermitPolicy('permit-1', () => true);
-        const notApplicablePolicy = createPermitPolicy('permit-2', () => false);
-        engine.addPolicy(permitPolicy);
-        engine.addPolicy(notApplicablePolicy);
+        const engine = new RuleEvaluationEngine();
+        const permitRule = createPermitRule('permit-1', () => true);
+        const notApplicablerule = createPermitRule('permit-2', () => false);
+        engine.addRule(permitRule);
+        engine.addRule(notApplicablerule);
         const context = createDefaultContext();
 
-        it('Permitと評価され、appliedRuleにはPermitポリシーが設定されること', () => {
+        it('Permitと評価され、appliedRuleにはPermitルールが設定されること', () => {
           const result = engine.evaluate(context);
 
           expect(result).toEqual({
             type: 'permit',
-            appliedRule: permitPolicy,
+            appliedRule: permitRule,
             context: context
           });
         })
       })
 
       describe('評価がDenyとnot-applicableで競合', () => {
-        const engine = new PolicyEvaluationEngine();
-        const denyPolicy = createDenyPolicy('deny-1', () => true);
-        const notApplicablePolicy = createDenyPolicy('deny-2', () => false);
-        engine.addPolicy(denyPolicy);
-        engine.addPolicy(notApplicablePolicy);
+        const engine = new RuleEvaluationEngine();
+        const denyRule = createDenyRule('deny-1', () => true);
+        const notApplicablerule = createDenyRule('deny-2', () => false);
+        engine.addRule(denyRule);
+        engine.addRule(notApplicablerule);
         const context = createDefaultContext();
 
-        it('Denyと評価され、appliedRuleにはDenyポリシーが設定されること', () => {
+        it('Denyと評価され、appliedRuleにはDenyルールが設定されること', () => {
           const result = engine.evaluate(context);
 
           expect(result).toEqual({
             type: 'deny',
-            appliedRule: denyPolicy,
+            appliedRule: denyRule,
             context: context
           });
         })
       })
 
       describe('評価がPermit、Deny、not-applicableで競合', () => {
-        const engine = new PolicyEvaluationEngine();
-        const permitPolicy = createPermitPolicy('permit-1', () => true);
-        const denyPolicy = createDenyPolicy('deny-1', () => true);
-        const notApplicablePolicy = createPermitPolicy('permit-2', () => false);
-        engine.addPolicy(permitPolicy);
-        engine.addPolicy(denyPolicy);
-        engine.addPolicy(notApplicablePolicy);
+        const engine = new RuleEvaluationEngine();
+        const permitRule = createPermitRule('permit-1', () => true);
+        const denyRule = createDenyRule('deny-1', () => true);
+        const notApplicablerule = createPermitRule('permit-2', () => false);
+        engine.addRule(permitRule);
+        engine.addRule(denyRule);
+        engine.addRule(notApplicablerule);
         const context = createDefaultContext();
 
-        it('Denyと評価され、appliedRuleにはDenyポリシーが設定されること', () => {
+        it('Denyと評価され、appliedRuleにはDenyルールが設定されること', () => {
           const result = engine.evaluate(context);
 
           expect(result).toEqual({
             type: 'deny',
-            appliedRule: denyPolicy,
+            appliedRule: denyRule,
             context: context
           });
         })
       })
 
       describe('評価順がPermit、Deny、Permitで競合', () => {
-        const engine = new PolicyEvaluationEngine();
-        const permitPolicy1 = createPermitPolicy('permit-1', () => true);
-        const denyPolicy = createDenyPolicy('deny-1', () => true);
-        const permitPolicy2 = createPermitPolicy('permit-2', () => true);
-        engine.addPolicy(permitPolicy1);
-        engine.addPolicy(denyPolicy);
-        engine.addPolicy(permitPolicy2);
+        const engine = new RuleEvaluationEngine();
+        const permitRule1 = createPermitRule('permit-1', () => true);
+        const denyRule = createDenyRule('deny-1', () => true);
+        const permitRule2 = createPermitRule('permit-2', () => true);
+        engine.addRule(permitRule1);
+        engine.addRule(denyRule);
+        engine.addRule(permitRule2);
         const context = createDefaultContext();
 
-        it('Denyと評価され、appliedRuleにはDenyポリシーが設定されること', () => {
+        it('Denyと評価され、appliedRuleにはDenyルールが設定されること', () => {
           const result = engine.evaluate(context);
 
           expect(result).toEqual({
             type: 'deny',
-            appliedRule: denyPolicy,
+            appliedRule: denyRule,
             context: context
           });
         })
       })
 
       describe('評価順がPermit、not-applicable、Permitで競合', () => {
-        const engine = new PolicyEvaluationEngine();
-        const permitPolicy1 = createPermitPolicy('permit-1', () => true);
-        const notApplicablePolicy = createPermitPolicy('permit-2', () => false);
-        const permitPolicy2 = createPermitPolicy('permit-3', () => true);
-        engine.addPolicy(permitPolicy1);
-        engine.addPolicy(notApplicablePolicy);
-        engine.addPolicy(permitPolicy2);
+        const engine = new RuleEvaluationEngine();
+        const permitRule1 = createPermitRule('permit-1', () => true);
+        const notApplicablerule = createPermitRule('permit-2', () => false);
+        const permitRule2 = createPermitRule('permit-3', () => true);
+        engine.addRule(permitRule1);
+        engine.addRule(notApplicablerule);
+        engine.addRule(permitRule2);
         const context = createDefaultContext();
 
-        it('Permitと評価され、appliedRuleには最初のPermitポリシーが設定されること', () => {
+        it('Permitと評価され、appliedRuleには最初のPermitルールが設定されること', () => {
           const result = engine.evaluate(context);
 
           expect(result).toEqual({
             type: 'permit',
-            appliedRule: permitPolicy1,
+            appliedRule: permitRule1,
             context: context
           });
         })
