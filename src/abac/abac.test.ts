@@ -40,7 +40,7 @@ function createDenyRule(id: string, condition?: (ctx: EvaluationContext) => bool
 
 describe('ABAC (Attribute-Based Access Control)', () => {
   describe('ルールが存在しない', () => {
-    it('not-applicableと評価され、reasonに「ルールが1つも登録されていない」が設定されていること', () => {
+    it('not-applicableと判定され、reasonに「ルールが1つも登録されていない」が設定されていること', () => {
       const engine = new RuleEvaluationEngine();
       const context = createDefaultContext();
 
@@ -56,7 +56,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
   describe('単一ルール', () => {
     describe('単純な条件評価', () => {
       describe('Permitルールの条件を満たす', () => {
-        it('Permitと評価され、appliedRuleにPermitルールが設定されること', () => {
+        it('Permitと判定され、appliedRuleにPermitルールが設定されること', () => {
           const engine = new RuleEvaluationEngine();
           const rule = createPermitRule('permit-1', () => true);
           engine.addRule(rule);
@@ -73,7 +73,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
       })
 
       describe('Permitルールの条件を満たさない', () => {
-        it('not-applicableと評価され、reasonに「Permitルールを含む構成で、どの条件にもマッチしない」が設定され、contextにも値が設定されていること', () => {
+        it('not-applicableと判定され、reasonに「Permitルールを含む構成で、どの条件にもマッチしない」が設定され、contextにも値が設定されていること', () => {
           const engine = new RuleEvaluationEngine();
           const rule = createPermitRule('permit-1', () => false);
           engine.addRule(rule);
@@ -89,7 +89,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
       })
 
       describe('Denyルールの条件を満たす', () => {
-        it('Denyと評価され、appliedRuleにDenyルールが設定されること', () => {
+        it('Denyと判定され、appliedRuleにDenyルールが設定されること', () => {
           const engine = new RuleEvaluationEngine();
           const rule = createDenyRule('deny-1', () => true);
           engine.addRule(rule);
@@ -106,7 +106,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
       })
 
       describe('Denyルールの条件を満たさない', () => {
-        it('not-applicableと評価され、reasonに「Denyルールのみ存在し、条件にマッチしない」が設定され、contextにも値が設定されていること', () => {
+        it('not-applicableと判定され、reasonに「Denyルールのみ存在し、条件にマッチしない」が設定され、contextにも値が設定されていること', () => {
           const engine = new RuleEvaluationEngine();
           const rule = createDenyRule('deny-1', () => false);
           engine.addRule(rule);
@@ -136,7 +136,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
               const context = createDefaultContext();
               context.subject.department = context.resource.department;
 
-              it('Permitと評価されること', () => {
+              it('Permitと判定されること', () => {
                 const result = engine.evaluate(context);
 
                 expect(result).toEqual({
@@ -151,7 +151,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
               const context = createDefaultContext();
               context.subject.department = 'finance';
 
-              it('not-applicableと評価されること', () => {
+              it('not-applicableと判定されること', () => {
                 const result = engine.evaluate(context);
 
                 expect(result).toEqual({
@@ -175,7 +175,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
               const context = createDefaultContext();
               context.resource.classificationLevel = 2;
 
-              it('not-applicableと評価されること', () => {
+              it('not-applicableと判定されること', () => {
                 const result = engine.evaluate(context);
 
                 expect(result).toEqual({
@@ -189,7 +189,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
               const context = createDefaultContext();
               context.resource.classificationLevel = 3;
 
-              it('Permitと評価されること', () => {
+              it('Permitと判定されること', () => {
                 const result = engine.evaluate(context);
 
                 expect(result).toEqual({
@@ -218,7 +218,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
               const context = createDefaultContext();
               context.environment.currentTime = new Date('2025-01-01T08:59:59');
 
-              it('not-applicableと評価されること', () => {
+              it('not-applicableと判定されること', () => {
                 const result = engine.evaluate(context);
 
                 expect(result).toEqual({
@@ -232,7 +232,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
               const context = createDefaultContext();
               context.environment.currentTime = new Date('2025-01-01T09:00:00');
 
-              it('Permitと評価されること', () => {
+              it('Permitと判定されること', () => {
                 const result = engine.evaluate(context);
 
                 expect(result).toEqual({
@@ -247,7 +247,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
               const context = createDefaultContext();
               context.environment.currentTime = new Date('2025-01-01T17:00:00');
 
-              it('Permitと評価されること', () => {
+              it('Permitと判定されること', () => {
                 const result = engine.evaluate(context);
 
                 expect(result).toEqual({
@@ -262,7 +262,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
               const context = createDefaultContext();
               context.environment.currentTime = new Date('2025-01-01T17:00:01');
 
-              it('not-applicableと評価されること', () => {
+              it('not-applicableと判定されること', () => {
                 const result = engine.evaluate(context);
 
                 expect(result).toEqual({
@@ -293,7 +293,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
                 context.subject.clearanceLevel = 4;
                 context.resource.classificationLevel = 3;
 
-                it('Permitと評価されること', () => {
+                it('Permitと判定されること', () => {
                   const result = engine.evaluate(context);
 
                   expect(result).toEqual({
@@ -311,7 +311,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
                 context.subject.clearanceLevel = 3;
                 context.resource.classificationLevel = 3;
 
-                it('Permitと評価されること', () => {
+                it('Permitと判定されること', () => {
                   const result = engine.evaluate(context);
 
                   expect(result).toEqual({
@@ -329,7 +329,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
                 context.subject.clearanceLevel = 2;
                 context.resource.classificationLevel = 3;
 
-                it('not-applicableと評価されること', () => {
+                it('not-applicableと判定されること', () => {
                   const result = engine.evaluate(context);
 
                   expect(result).toEqual({
@@ -348,7 +348,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
                 context.subject.clearanceLevel = 4;
                 context.resource.classificationLevel = 3;
 
-                it('not-applicableと評価されること', () => {
+                it('not-applicableと判定されること', () => {
                   const result = engine.evaluate(context);
 
                   expect(result).toEqual({
@@ -365,7 +365,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
                 context.subject.clearanceLevel = 3;
                 context.resource.classificationLevel = 3;
 
-                it('not-applicableと評価されること', () => {
+                it('not-applicableと判定されること', () => {
                   const result = engine.evaluate(context);
 
                   expect(result).toEqual({
@@ -382,7 +382,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
                 context.subject.clearanceLevel = 2;
                 context.resource.classificationLevel = 3;
 
-                it('not-applicableと評価されること', () => {
+                it('not-applicableと判定されること', () => {
                   const result = engine.evaluate(context);
 
                   expect(result).toEqual({
@@ -419,7 +419,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
                     context.action = 'read';
                     context.environment.location = 'office';
 
-                    it('Permitと評価されること', () => {
+                    it('Permitと判定されること', () => {
                       const result = engine.evaluate(context);
 
                       expect(result).toEqual({
@@ -438,7 +438,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
                     context.action = 'write';
                     context.environment.location = 'office';
 
-                    it('Permitと評価されること', () => {
+                    it('Permitと判定されること', () => {
                       const result = engine.evaluate(context);
 
                       expect(result).toEqual({
@@ -459,7 +459,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
                     context.action = 'read';
                     context.environment.location = 'office';
 
-                    it('Permitと評価されること', () => {
+                    it('Permitと判定されること', () => {
                       const result = engine.evaluate(context);
 
                       expect(result).toEqual({
@@ -478,7 +478,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
                     context.action = 'write';
                     context.environment.location = 'office';
 
-                    it('Permitと評価されること', () => {
+                    it('Permitと判定されること', () => {
                       const result = engine.evaluate(context);
 
                       expect(result).toEqual({
@@ -501,7 +501,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
                     context.action = 'read';
                     context.environment.location = 'home';
 
-                    it('Permitと評価されること', () => {
+                    it('Permitと判定されること', () => {
                       const result = engine.evaluate(context);
 
                       expect(result).toEqual({
@@ -520,7 +520,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
                     context.action = 'write';
                     context.environment.location = 'home';
 
-                    it('Permitと評価されること', () => {
+                    it('Permitと判定されること', () => {
                       const result = engine.evaluate(context);
 
                       expect(result).toEqual({
@@ -541,7 +541,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
                     context.action = 'read';
                     context.environment.location = 'home';
 
-                    it('Permitと評価されること', () => {
+                    it('Permitと判定されること', () => {
                       const result = engine.evaluate(context);
 
                       expect(result).toEqual({
@@ -560,7 +560,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
                     context.action = 'write';
                     context.environment.location = 'home';
 
-                    it('Permitと評価されること', () => {
+                    it('Permitと判定されること', () => {
                       const result = engine.evaluate(context);
 
                       expect(result).toEqual({
@@ -585,7 +585,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
                     context.action = 'read';
                     context.environment.location = 'office';
 
-                    it('not-applicableと評価されること', () => {
+                    it('not-applicableと判定されること', () => {
                       const result = engine.evaluate(context);
 
                       expect(result).toEqual({
@@ -603,7 +603,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
                     context.action = 'write';
                     context.environment.location = 'office';
 
-                    it('not-applicableと評価されること', () => {
+                    it('not-applicableと判定されること', () => {
                       const result = engine.evaluate(context);
 
                       expect(result).toEqual({
@@ -623,7 +623,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
                     context.action = 'read';
                     context.environment.location = 'office';
 
-                    it('Permitと評価されること', () => {
+                    it('Permitと判定されること', () => {
                       const result = engine.evaluate(context);
 
                       expect(result).toEqual({
@@ -642,7 +642,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
                     context.action = 'write';
                     context.environment.location = 'office';
 
-                    it('not-applicableと評価されること', () => {
+                    it('not-applicableと判定されること', () => {
                       const result = engine.evaluate(context);
 
                       expect(result).toEqual({
@@ -664,7 +664,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
                     context.action = 'read';
                     context.environment.location = 'home';
 
-                    it('not-applicableと評価されること', () => {
+                    it('not-applicableと判定されること', () => {
                       const result = engine.evaluate(context);
 
                       expect(result).toEqual({
@@ -682,7 +682,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
                     context.action = 'write';
                     context.environment.location = 'home';
 
-                    it('not-applicableと評価されること', () => {
+                    it('not-applicableと判定されること', () => {
                       const result = engine.evaluate(context);
 
                       expect(result).toEqual({
@@ -702,7 +702,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
                     context.action = 'read';
                     context.environment.location = 'home';
 
-                    it('not-applicableと評価されること', () => {
+                    it('not-applicableと判定されること', () => {
                       const result = engine.evaluate(context);
 
                       expect(result).toEqual({
@@ -720,7 +720,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
                     context.action = 'write';
                     context.environment.location = 'home';
 
-                    it('not-applicableと評価されること', () => {
+                    it('not-applicableと判定されること', () => {
                       const result = engine.evaluate(context);
 
                       expect(result).toEqual({
@@ -748,7 +748,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
         engine.addRule(rule2);
         const context = createDefaultContext();
 
-        it('Permitと評価され、appliedRuleには最初のPermitルールが設定されること', () => {
+        it('Permitと判定され、appliedRuleには最初のPermitルールが設定されること', () => {
           const result = engine.evaluate(context);
 
           expect(result).toEqual({
@@ -767,7 +767,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
         engine.addRule(rule2);
         const context = createDefaultContext();
 
-        it('Denyと評価され、appliedRuleには最初のDenyルールが設定されること', () => {
+        it('Denyと判定され、appliedRuleには最初のDenyルールが設定されること', () => {
           const result = engine.evaluate(context);
 
           expect(result).toEqual({
@@ -787,7 +787,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
           engine.addRule(rule2);
           const context = createDefaultContext();
 
-          it('not-applicableと評価され、reasonに「Permitルールを含む構成で、どの条件にもマッチしない」が設定されていること', () => {
+          it('not-applicableと判定され、reasonに「Permitルールを含む構成で、どの条件にもマッチしない」が設定されていること', () => {
             const result = engine.evaluate(context);
 
             expect(result).toEqual({
@@ -805,7 +805,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
           engine.addRule(rule2);
           const context = createDefaultContext();
 
-          it('not-applicableと評価され、reasonに「Denyルールのみ存在し、条件にマッチしない」が設定されていること', () => {
+          it('not-applicableと判定され、reasonに「Denyルールのみ存在し、条件にマッチしない」が設定されていること', () => {
             const result = engine.evaluate(context);
 
             expect(result).toEqual({
@@ -823,7 +823,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
           engine.addRule(rule2);
           const context = createDefaultContext();
 
-          it('not-applicableと評価され、reasonに「Permitルールを含む構成で、どの条件にもマッチしない」が設定されていること', () => {
+          it('not-applicableと判定され、reasonに「Permitルールを含む構成で、どの条件にもマッチしない」が設定されていること', () => {
             const result = engine.evaluate(context);
 
             expect(result).toEqual({
@@ -844,7 +844,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
         engine.addRule(denyRule);
         const context = createDefaultContext();
 
-        it('Denyと評価され、appliedRuleにはDenyルールが設定されること', () => {
+        it('Denyと判定され、appliedRuleにはDenyルールが設定されること', () => {
           const result = engine.evaluate(context);
 
           expect(result).toEqual({
@@ -863,7 +863,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
         engine.addRule(notApplicablerule);
         const context = createDefaultContext();
 
-        it('Permitと評価され、appliedRuleにはPermitルールが設定されること', () => {
+        it('Permitと判定され、appliedRuleにはPermitルールが設定されること', () => {
           const result = engine.evaluate(context);
 
           expect(result).toEqual({
@@ -882,7 +882,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
         engine.addRule(notApplicablerule);
         const context = createDefaultContext();
 
-        it('Denyと評価され、appliedRuleにはDenyルールが設定されること', () => {
+        it('Denyと判定され、appliedRuleにはDenyルールが設定されること', () => {
           const result = engine.evaluate(context);
 
           expect(result).toEqual({
@@ -903,7 +903,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
         engine.addRule(notApplicablerule);
         const context = createDefaultContext();
 
-        it('Denyと評価され、appliedRuleにはDenyルールが設定されること', () => {
+        it('Denyと判定され、appliedRuleにはDenyルールが設定されること', () => {
           const result = engine.evaluate(context);
 
           expect(result).toEqual({
@@ -924,7 +924,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
         engine.addRule(permitRule2);
         const context = createDefaultContext();
 
-        it('Denyと評価され、appliedRuleにはDenyルールが設定されること', () => {
+        it('Denyと判定され、appliedRuleにはDenyルールが設定されること', () => {
           const result = engine.evaluate(context);
 
           expect(result).toEqual({
@@ -945,7 +945,7 @@ describe('ABAC (Attribute-Based Access Control)', () => {
         engine.addRule(permitRule2);
         const context = createDefaultContext();
 
-        it('Permitと評価され、appliedRuleには最初のPermitルールが設定されること', () => {
+        it('Permitと判定され、appliedRuleには最初のPermitルールが設定されること', () => {
           const result = engine.evaluate(context);
 
           expect(result).toEqual({

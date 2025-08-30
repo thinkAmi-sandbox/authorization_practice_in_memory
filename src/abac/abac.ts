@@ -5,9 +5,7 @@
 // 型定義
 // ==========================================
 
-// パーミッション（ACL・RBACと共通）
-export type PermissionAction = 'read' | 'write'
-
+// 属性で使う共通の型定義
 // 部門
 export type Department = 'engineering' | 'finance' | 'hr' | 'sales'
 
@@ -20,7 +18,7 @@ export type SecurityLevel = 1 | 2 | 3 | 4 | 5
 export type Location = 'office' | 'home' | 'external'
 
 // Subject属性: アクセスを要求するユーザーの属性
-// ABACでは「誰が」に関する情報を表現
+// ABACの「誰が」に関する情報を表現
 export type SubjectAttributes = {
   userName: string  // ユーザー名
   department: Department
@@ -28,7 +26,7 @@ export type SubjectAttributes = {
 }
 
 // Resource属性: アクセス対象となるリソースの属性
-// ABACでは「何に」に関する情報を表現
+// ABACの「何に」に関する情報を表現
 export type ResourceAttributes = {
   // ドキュメント名
   documentName: string
@@ -39,7 +37,7 @@ export type ResourceAttributes = {
 }
 
 // Environment属性: アクセス時の環境的な属性
-// ABACでは「いつ・どこで」に関する情報を表現
+// ABACの「いつ・どこで」に関する情報を表現
 export type EnvironmentAttributes = {
   // アクセス時刻
   currentTime: Date
@@ -47,6 +45,9 @@ export type EnvironmentAttributes = {
   location: Location
 }
 
+// パーミッション（ACL・RBACと共通）
+// ABACの「何をする」に関する情報を表現
+export type PermissionAction = 'read' | 'write'
 
 // 評価コンテキスト: 個々のルール評価に必要なすべての属性情報
 //ABACの中心的なデータ構造で、4つの属性カテゴリーを統合
@@ -55,10 +56,11 @@ export type EvaluationContext = {
   subject: SubjectAttributes
   // アクセス対象の属性
   resource: ResourceAttributes
-  // 実行したいアクション
-  action: PermissionAction
   // 環境属性
   environment: EnvironmentAttributes
+  // 実行したいアクション
+  action: PermissionAction
+
 }
 
  // ABACにおける個別の権限制御ルール
@@ -125,7 +127,7 @@ export class RuleEvaluationEngine {
     this.rules = new Map()
   }
 
-  // 与えられたコンテキストに対してルールを使って評価する
+  // 与えられたコンテキストに対してルールを評価し、アクセス可否を判定する
   //
   // 実装すべき評価アルゴリズム（Deny-Override）:
   // 1. すべてのルールを評価し、条件にマッチするものを特定
