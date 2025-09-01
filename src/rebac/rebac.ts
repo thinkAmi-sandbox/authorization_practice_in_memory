@@ -20,60 +20,56 @@ export type PermissionBits = {
 export type PermissionAction = keyof PermissionBits;
 
 // エンティティ間の関係タイプ
-export type EntityRelationType = 
+// 間接的関係で、権限伝播の経路
+export type IndirectRelationType =
   | 'manages'     // 管理関係
   | 'memberOf'    // 所属関係 (user memberOf team)
   | 'has'         // 所属関係 (team has user)
   | 'delegatedBy' // 委譲関係
 
 // リソースへのアクセス関係タイプ
-export type ResourceRelationType = 
+// 直接的関係で、エンティティからリソースへの直接権限
+export type DirectRelationType =
   | 'owns'        // 所有関係
   | 'viewer'      // 閲覧者権限
   | 'editor'      // 編集者権限
 
 // 関係性の種類
-export type RelationType = EntityRelationType | ResourceRelationType
+export type RelationType = IndirectRelationType | DirectRelationType
 
-// エンティティ間の関係タプル
-export interface EntityRelationTuple {
+// 間接的関係タプル
+export type IndirectRelationTuple = {
   subject: EntityId           // ユーザーまたはグループ
-  relation: EntityRelationType // エンティティ間の関係
+  relation: IndirectRelationType // エンティティ間の関係
   object: EntityId            // グループまたはユーザー
 }
 
-// リソースへの関係タプル
-export interface ResourceRelationTuple {
+// 直接的関係タプル
+export type DirectRelationTuple = {
   subject: EntityId             // ユーザーまたはグループ
-  relation: ResourceRelationType // リソースへのアクセス関係
+  relation: DirectRelationType // リソースへのアクセス関係
   object: EntityId              // リソース（ドキュメント）
 }
 
 // 関係性タプル
-export type RelationTuple = EntityRelationTuple | ResourceRelationTuple;
+export type RelationTuple = IndirectRelationTuple | DirectRelationTuple;
 
 // 関係性の連鎖
 export type RelationshipChain = RelationTuple[];
 
-// 権限ルール
-export interface PermissionRule {
-  relation: ResourceRelationType;
+// 関係が持つパーミッション
+export type RelationPermissions = {
+  relation: DirectRelationType;
   permissions: PermissionBits;
   description: string;
 }
 
-// ReBAC設定
-export interface ReBACConfig {
-  maxDepth: number;           // 探索の最大深度
-}
-
 // 探索状態（内部使用）
-interface SearchState {
+type SearchState = {
   current: EntityId;
   path: RelationshipChain;
   depth: number;
 }
-
 
 // 探索結果の型
 export type ExplorationResult =
@@ -90,17 +86,17 @@ export type ExplorationResult =
       maxDepth: number;
     };
 
-// ReBAC判定結果（Tagged Union）
+// ReBAC判定結果
 export type ReBACDecision = 
   | { 
       type: 'granted';
       path: RelationshipChain;        // 権限の根拠となる関係性パス
-      relation: ResourceRelationType;    // マッチした関係
+      relation: DirectRelationType;    // マッチした関係
     }
   | { 
       type: 'denied';
       reason: 'no-relation';     // 必要な関係性が見つからない
-      searchedRelations: ResourceRelationType[]; // 探索した関係
+      searchedRelations: DirectRelationType[]; // 探索した関係
     }
   | {
       type: 'denied';
@@ -108,12 +104,17 @@ export type ReBACDecision =
       maxDepth: number;
     };
 
+// 関係性の探索を行うクラス向けの設定
+export type ExplorationConfig = {
+  maxDepth: number;           // 探索の最大深度
+}
+
 // ============================================================
 // デフォルト設定
 // ============================================================
 
 // デフォルトの権限ルール（リソースへのアクセス権限のみ）
-export const DEFAULT_PERMISSION_RULES: PermissionRule[] = [
+export const DEFAULT_RELATION_PERMISSIONS: RelationPermissions[] = [
   { 
     relation: 'owns', 
     permissions: { read: true, write: true }, 
@@ -132,7 +133,7 @@ export const DEFAULT_PERMISSION_RULES: PermissionRule[] = [
 ];
 
 // デフォルト設定
-export const DEFAULT_CONFIG: ReBACConfig = {
+export const DEFAULT_CONFIG: ExplorationConfig = {
   maxDepth: 3
 };
 
@@ -155,7 +156,7 @@ export class RelationGraph {
   }
 
   // 関係性を追加
-  addRelation(tuple: EntityRelationTuple | ResourceRelationTuple): void {
+  addRelation(tuple: IndirectRelationTuple | DirectRelationTuple): void {
     // 順方向: subject -> relation -> objects
     const subjectRelations = this.adjacencyList.get(tuple.subject) ?? new Map();
     if (!this.adjacencyList.has(tuple.subject)) {
@@ -271,7 +272,7 @@ export class RelationGraph {
 export class RelationshipExplorer {
   constructor(
     private graph: RelationGraph,
-    private config: ReBACConfig = DEFAULT_CONFIG
+    private config: ExplorationConfig = DEFAULT_CONFIG
   ) {}
 
   // 関係性を取得する
@@ -369,8 +370,8 @@ export class ReBACProtectedResource {
   constructor(
     private resourceId: EntityId,
     graph: RelationGraph,
-    private permissionRules: PermissionRule[] = DEFAULT_PERMISSION_RULES,
-    config?: ReBACConfig
+    private relationPermissions: RelationPermissions[] = DEFAULT_RELATION_PERMISSIONS,
+    config?: ExplorationConfig
   ) {
     this.explorer = new RelationshipExplorer(graph, config);
   }
@@ -390,7 +391,7 @@ export class ReBACProtectedResource {
         return { 
           type: 'granted', 
           path: result.path, 
-          relation: result.matchedRelation as ResourceRelationType
+          relation: result.matchedRelation as DirectRelationType
         };
 
       case 'max-depth-exceeded':
@@ -410,9 +411,9 @@ export class ReBACProtectedResource {
   }
 
   // アクションに必要な関係性を取得
-  getRequiredRelations(action: PermissionAction): ReadonlySet<ResourceRelationType> {
+  getRequiredRelations(action: PermissionAction): ReadonlySet<DirectRelationType> {
     return new Set(
-      this.permissionRules
+      this.relationPermissions
       .filter(rule => rule.permissions[action])
       .map(rule => rule.relation)
     );

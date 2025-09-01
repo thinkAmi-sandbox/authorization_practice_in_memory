@@ -1,5 +1,5 @@
 import {describe, expect, it} from "bun:test";
-import {DEFAULT_PERMISSION_RULES, ReBACProtectedResource, RelationGraph, RelationshipExplorer, RelationTuple} from "./rebac";
+import {DEFAULT_RELATION_PERMISSIONS, ReBACProtectedResource, RelationGraph, RelationshipExplorer, RelationTuple} from "./rebac";
 
 describe('ReBAC (Relationship-Based Access Control)', () => {
   // 1. RelationGraphクラス
@@ -782,7 +782,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
               const resource = new ReBACProtectedResource(
                 'document',
                 graph,
-                DEFAULT_PERMISSION_RULES
+                DEFAULT_RELATION_PERMISSIONS
               );
 
               const result = resource.checkRelation('alice', 'write');
@@ -831,7 +831,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
               const resource = new ReBACProtectedResource(
                 'important-doc',
                 graph,
-                DEFAULT_PERMISSION_RULES
+                DEFAULT_RELATION_PERMISSIONS
               );
 
               const writeResult = resource.checkRelation('alice', 'write');
@@ -999,7 +999,7 @@ describe('ReBAC (Relationship-Based Access Control)', () => {
             graph.addRelation(relation2);
             graph.addRelation(relation3);
 
-            const resource = new ReBACProtectedResource('doc1', graph, DEFAULT_PERMISSION_RULES, {maxDepth: 2});
+            const resource = new ReBACProtectedResource('doc1', graph, DEFAULT_RELATION_PERMISSIONS, {maxDepth: 2});
             const result = resource.checkRelation('user1', 'write');
 
             expect(result).toEqual({
