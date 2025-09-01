@@ -1,91 +1,85 @@
-/**
- * ReBAC (Relationship-Based Access Control) 学習用実装
- * 
- * このファイルは学習用のスケルトンです。
- * 各メソッドの実装は学習者が行ってください。
- */
+// ReBAC (Relationship-Based Access Control) 学習用実装
+// 
+// このファイルは学習用のスケルトンです。
+// 各メソッドの実装は学習者が行ってください。
 
 // ============================================================
 // 基本型定義
 // ============================================================
 
-/** エンティティ識別子 */
+// エンティティ識別子
 export type EntityId = string;
 
-/** 権限ビット（他の実装と共通） */
+// 権限ビット（他の実装と共通）
 export type PermissionBits = {
   read: boolean;
   write: boolean;
 };
 
-/** 権限アクション */
+// 権限アクション
 export type PermissionAction = keyof PermissionBits;
 
-/** エンティティ間の関係タイプ */
+// エンティティ間の関係タイプ
 export type EntityRelationType = 
   | 'manages'     // 管理関係
   | 'memberOf'    // 所属関係 (user memberOf team)
   | 'has'         // 所属関係 (team has user)
   | 'delegatedBy' // 委譲関係
 
-/** リソースへのアクセス関係タイプ */
+// リソースへのアクセス関係タイプ
 export type ResourceRelationType = 
   | 'owns'        // 所有関係
   | 'viewer'      // 閲覧者権限
   | 'editor'      // 編集者権限
 
-/** 関係性の種類（統合型・既存コードとの互換性のため維持） */
+// 関係性の種類
 export type RelationType = EntityRelationType | ResourceRelationType
 
-/** エンティティ間の関係タプル */
+// エンティティ間の関係タプル
 export interface EntityRelationTuple {
   subject: EntityId           // ユーザーまたはグループ
   relation: EntityRelationType // エンティティ間の関係
   object: EntityId            // グループまたはユーザー
 }
 
-/** リソースへの関係タプル */
+// リソースへの関係タプル
 export interface ResourceRelationTuple {
   subject: EntityId             // ユーザーまたはグループ
   relation: ResourceRelationType // リソースへのアクセス関係
   object: EntityId              // リソース（ドキュメント）
 }
 
-/** 関係性タプル */
-export interface RelationTuple {
-  subject: EntityId;     // 主体（ユーザーやグループ）
-  relation: RelationType; // 関係の種類
-  object: EntityId;      // 客体（リソースやグループ）
-}
+// 関係性タプル
+export type RelationTuple = EntityRelationTuple | ResourceRelationTuple;
 
-/** 関係性パス（探索結果） */
-export type RelationPath = RelationTuple[];
+// 関係性の連鎖
+export type RelationshipChain = RelationTuple[];
 
-/** 権限ルール */
+// 権限ルール
 export interface PermissionRule {
   relation: ResourceRelationType;
   permissions: PermissionBits;
   description: string;
 }
 
-/** ReBAC設定 */
+// ReBAC設定
 export interface ReBACConfig {
   maxDepth: number;           // 探索の最大深度
 }
 
-/** 探索状態（内部使用） */
+// 探索状態（内部使用）
 interface SearchState {
   current: EntityId;
-  path: RelationPath;
+  path: RelationshipChain;
   depth: number;
 }
 
 
-/** 探索結果の型 */
+// 探索結果の型
 export type ExplorationResult =
   | {
       type: 'found';
-      path: RelationPath;
+      path: RelationshipChain;
       matchedRelation: RelationType;
     }
   | {
@@ -96,11 +90,11 @@ export type ExplorationResult =
       maxDepth: number;
     };
 
-/** ReBAC判定結果（Tagged Union） */
+// ReBAC判定結果（Tagged Union）
 export type ReBACDecision = 
   | { 
       type: 'granted';
-      path: RelationPath;        // 権限の根拠となる関係性パス
+      path: RelationshipChain;        // 権限の根拠となる関係性パス
       relation: ResourceRelationType;    // マッチした関係
     }
   | { 
@@ -118,7 +112,7 @@ export type ReBACDecision =
 // デフォルト設定
 // ============================================================
 
-/** デフォルトの権限ルール（リソースへのアクセス権限のみ） */
+// デフォルトの権限ルール（リソースへのアクセス権限のみ）
 export const DEFAULT_PERMISSION_RULES: PermissionRule[] = [
   { 
     relation: 'owns', 
@@ -137,7 +131,7 @@ export const DEFAULT_PERMISSION_RULES: PermissionRule[] = [
   }
 ];
 
-/** デフォルト設定 */
+// デフォルト設定
 export const DEFAULT_CONFIG: ReBACConfig = {
   maxDepth: 3
 };
@@ -146,10 +140,8 @@ export const DEFAULT_CONFIG: ReBACConfig = {
 // RelationGraph クラス
 // ============================================================
 
-/**
- * 関係性グラフを管理するクラス
- * 隣接リストによる効率的なグラフ表現を実装
- */
+// 関係性グラフを管理するクラス
+// 隣接リストによる効率的なグラフ表現を実装
 export class RelationGraph {
   // 順方向の隣接リスト (subject -> relation -> objects)
   private adjacencyList: Map<EntityId, Map<RelationType, Set<EntityId>>>;
@@ -162,9 +154,7 @@ export class RelationGraph {
     this.reverseAdjacencyList = new Map();
   }
 
-  /**
-   * 関係性を追加
-   */
+  // 関係性を追加
   addRelation(tuple: EntityRelationTuple | ResourceRelationTuple): void {
     // 順方向: subject -> relation -> objects
     const subjectRelations = this.adjacencyList.get(tuple.subject) ?? new Map();
@@ -191,10 +181,7 @@ export class RelationGraph {
     relationSubjects.add(tuple.subject);
   }
 
-  /**
-   * 関係性を削除
-   * @param tuple 削除する関係性タプル
-   */
+  // 関係性を削除
   removeRelation(tuple: RelationTuple): void {
     // 順方向: subject -> relation -> objects
     const subjectRelations = this.adjacencyList.get(tuple.subject)
@@ -227,22 +214,12 @@ export class RelationGraph {
     }
   }
 
-  /**
-   * 直接関係の存在確認
-   * @param subject 主体
-   * @param relation 関係の種類
-   * @param object 客体
-   * @returns 関係が存在する場合true
-   */
+  // 直接関係の存在確認
   hasDirectRelation(subject: EntityId, relation: RelationType, object: EntityId): boolean {
     return !!this.adjacencyList.get(subject)?.get(relation)?.has(object)
   }
 
-  /**
-   * 主体から出る関係を取得
-   * @param subject 主体
-   * @returns 関係性タプルの配列
-   */
+  // 主体から出る関係を取得
   getRelations(subject: EntityId): ReadonlyArray<RelationTuple> {
     const relations = this.adjacencyList.get(subject);
     if (!relations) return [];
@@ -260,11 +237,7 @@ export class RelationGraph {
     return tuples;
   }
 
-  /**
-   * 客体への関係を取得（逆方向）
-   * @param object 客体
-   * @returns 関係性タプルの配列
-   */
+  // 客体への関係を取得（逆方向）
   getReverseRelations(object: EntityId): ReadonlyArray<RelationTuple> {
     const relations = this.reverseAdjacencyList.get(object);
     if (!relations) return [];
@@ -282,9 +255,7 @@ export class RelationGraph {
     return tuples;
   }
 
-  /**
-   * すべての関係を削除
-   */
+  // すべての関係を削除
   clear(): void {
     this.adjacencyList.clear();
     this.reverseAdjacencyList.clear();
@@ -295,31 +266,22 @@ export class RelationGraph {
 // RelationshipExplorer クラス
 // ============================================================
 
-/**
- * 関係性の探索を行うクラス
- * BFS（幅優先探索）により最短パスを発見
- */
+// 関係性の探索を行うクラス
+// BFS（幅優先探索）により最短パスを発見
 export class RelationshipExplorer {
   constructor(
     private graph: RelationGraph,
     private config: ReBACConfig = DEFAULT_CONFIG
   ) {}
 
-  /**
-   * 関係性を取得する
-   *
-   * 既存のReBAC実装に従い、直接関係のチェック→BFSの順で、関係性を取得する
-   * 
-   * @param subject 開始エンティティ
-   * @param targetObject 目標エンティティ
-   * @param targetRelations チェック対象の関係タイプのセット
-   * @returns 探索結果（パス発見、未発見、深度制限超過）と発見された関係
-   * 
-   * @example
-   * // 複数の関係を一度にチェック
-   * const relations = new Set(['viewer', 'editor', 'owns']);
-   * const result = explorer.findPathWithAnyRelation('alice', 'document', relations);
-   */
+  // 関係性を取得する
+  //
+  // 既存のReBAC実装に従い、直接関係のチェック→BFSの順で、関係性を取得する
+  // 
+  // 例:
+  // 複数の関係を一度にチェック
+  // const relations = new Set(['viewer', 'editor', 'owns']);
+  // const result = explorer.findPathWithAnyRelation('alice', 'document', relations);
   findRelationPath(
     subject: EntityId,
     targetObject: EntityId,
@@ -400,9 +362,7 @@ export class RelationshipExplorer {
 // ReBACProtectedResource クラス
 // ============================================================
 
-/**
- * ReBACによって保護されたリソースを表すクラス
- */
+// ReBACによって保護されたリソースを表すクラス
 export class ReBACProtectedResource {
   private explorer: RelationshipExplorer;
 
@@ -415,12 +375,7 @@ export class ReBACProtectedResource {
     this.explorer = new RelationshipExplorer(graph, config);
   }
 
-  /**
-   * 関係性に基づいて権限をチェック
-   * @param subject チェック対象の主体
-   * @param action 実行したいアクション
-   * @returns 権限判定結果
-   */
+  // 関係性に基づいて権限をチェック
   checkRelation(subject: EntityId, action: PermissionAction): ReBACDecision {
     const requiredRelations = this.getRequiredRelations(action);
 
@@ -454,11 +409,7 @@ export class ReBACProtectedResource {
     }
   }
 
-  /**
-   * アクションに必要な関係性を取得
-   * @param action 権限アクション
-   * @returns 必要な関係タイプの配列
-   */
+  // アクションに必要な関係性を取得
   getRequiredRelations(action: PermissionAction): ReadonlySet<ResourceRelationType> {
     return new Set(
       this.permissionRules
