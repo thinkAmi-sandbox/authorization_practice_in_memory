@@ -15,3 +15,4 @@
 - [権限管理の1つであるACL (Access Control List) をTypeScriptで実装してみた - メモ的な思考的な](https://thinkami.hatenablog.com/entry/2025/08/25/212900)
 - [権限管理の1つであるRBAC (Role-Based Access Control) をTypeScriptで実装してみた - メモ的な思考的な](https://thinkami.hatenablog.com/entry/2025/08/29/221436)
 - [権限管理の1つであるABAC (Attribute-Based Access Control) をTypeScriptで実装してみた - メモ的な思考的な](https://thinkami.hatenablog.com/entry/2025/08/30/220117)
+- [権限管理の1つであるReBAC (Relationship-Based Access Control) をTypeScriptで実装してみた - メモ的な思考的な](https://thinkami.hatenablog.com/entry/2025/09/05/223634)
